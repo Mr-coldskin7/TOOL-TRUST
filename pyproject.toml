@@ -1,0 +1,14 @@
+[project]
+name = "tool-trust"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastmcp>=3.4.6",
+    "pyyaml>=6.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

@@ -1,0 +1,18 @@
+# .claude/skills/register-tool/templates/tool.py.tmpl
+import subprocess
+from fastmcp import FastMCP
+
+
+def register(mcp: FastMCP) -> None:
+    """把二进制包装成 FastMCP 工具。命令与参数来自 tool.yaml。"""
+    @mcp.tool
+    def {{ tool_name }}({{ params }}) -> str:
+        """{{ description }}"""
+        result = subprocess.run(
+            [{{ command_literal }}, *{{ args_list }}],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip() or f"exit {result.returncode}")
+        return result.stdout.strip()

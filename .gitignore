@@ -1,0 +1,17 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Compiled tool binaries (register-tool skill)
+tools/*/test
+tools/*/evil-write
+
+# Attest observation temp
+.obs/
