@@ -2,10 +2,12 @@
 import re
 
 # 典型 strace 行：`12345 openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3`
+# 失败调用带负数返回值：`12345 openat(...) = -1 ENOENT (No such file or directory)`
+# 负数必须捕获——未遂的越界操作（connect 被拒、写文件失败）同样是要证据的
 _EVENT_RE = re.compile(
     r"^\s*(?P<pid>\d+)\s+"
     r"(?P<syscall>[A-Za-z0-9_]+)\((?P<args>.*)\)"
-    r"\s*=\s*(?P<ret>[?0-9]+(?:,\s*[0-9]+)*)"
+    r"\s*=\s*(?P<ret>-?[?0-9]+(?:,\s*[0-9]+)*)"
 )
 
 
