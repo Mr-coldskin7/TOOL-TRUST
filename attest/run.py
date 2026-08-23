@@ -25,7 +25,7 @@ def run_tool(manifest: dict, tool_dir: pathlib.Path, inputs: list[str]) -> str:
             "--rm",
             "--cap-add=SYS_PTRACE",
             "-v",
-            f"{tool_dir.resolve()}:/src",
+            f"{tool_dir.resolve()}:/src:ro",
             "-w",
             "/src",
             "-v",
