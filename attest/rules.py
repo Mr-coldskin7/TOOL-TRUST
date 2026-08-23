@@ -104,9 +104,42 @@ _FD_SYSCALLS = {
     "setsockopt",
     "getsockopt",
     "shutdown",
+    "lseek",
+    "lseek64",
 }
 
 _FD_RE = re.compile(r"^\s*(\d+)")
+_PATH_RE = re.compile(r'"([^"]*)"')
+# 这些 syscall 的参数第一个不是路径（write(fd,..) 的内容里可能含引号字符串）
+_NO_PATH_SYSCALLS = {"write", "writev", "pwrite", "pwritev", "sendfile", "sendfile64"}
+
+# 声明模式可接受的意图模式（create 最受限，overwrite 全接受）
+MODE_ALLOWS = {
+    "create": {"create"},
+    "append": {"create", "append"},
+    "overwrite": {"create", "append", "overwrite"},
+}
+
+
+def write_attrs(syscall: str, args: str) -> tuple[str | None, str | None]:
+    """从写类 syscall 提取（目标路径, 意图模式）。带路径的 open 才可判定。
+
+    模式判定（不开语言旗标，只看 strace 文本里的 flag）：
+      O_TRUNC  → overwrite（清空重建）
+      O_APPEND → append（追加尾部）
+      其他     → create（新建）
+    """
+    if syscall in _NO_PATH_SYSCALLS:
+        return None, None
+    m = _PATH_RE.search(args)
+    if m is None:
+        return None, None
+    path = m.group(1)
+    if "O_TRUNC" in args:
+        return path, "overwrite"
+    if "O_APPEND" in args:
+        return path, "append"
+    return path, "create"
 
 
 def classify(syscall: str, args: str) -> str:

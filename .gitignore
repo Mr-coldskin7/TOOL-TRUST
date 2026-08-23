@@ -12,6 +12,8 @@ wheels/
 # Compiled tool binaries (register-tool skill)
 tools/*/test
 tools/*/evil-write
+tools/*/evil-overwrite
 
 # Attest observation temp
 .obs/
+.pi/

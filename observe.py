@@ -28,14 +28,21 @@ def _drop_launch_execve(events: list[dict]) -> list[dict]:
     return events
 
 
+def annotate(events: list[dict]) -> None:
+    """给事件标注 class（及 file-write 的 path/mode）。就地修改。"""
+    for e in events:
+        e["class"] = rules.classify(e["syscall"], e["args"])
+        if e["class"] == "file-write":
+            e["path"], e["mode"] = rules.write_attrs(e["syscall"], e["args"])
+
+
 def observe(tool: str, inputs: list[str]) -> dict:
     manifest = load_manifest(tool)
     tool_dir = TOOLS_DIR / tool
     build.build_tool(manifest, tool_dir)
     text = run.run_tool(manifest, tool_dir, inputs)
     events = _drop_launch_execve(parse.parse_strace(text))
-    for e in events:
-        e["class"] = rules.classify(e["syscall"], e["args"])
+    annotate(events)
     violations = reconcile.reconcile(events, manifest["claims"])
     return report.build_report(
         manifest["name"], inputs, manifest["claims"], events, violations
@@ -48,14 +55,30 @@ def generate_claims(tool: str, inputs: list[str]) -> None:
     build.build_tool(manifest, tool_dir)
     text = run.run_tool(manifest, tool_dir, inputs)
     events = _drop_launch_execve(parse.parse_strace(text))
-    for e in events:
-        e["class"] = rules.classify(e["syscall"], e["args"])
+    annotate(events)
 
     observed = sorted({e["class"] for e in events})
     known = set(rules.SEVERITY)
     # other 永远不允许进 allow——它是未知行为，默认拒绝的兜底
     allow = [c for c in observed if c != "other"]
-    deny = sorted((known - set(allow)) | {"other"})
+
+    # file-write 结构化：聚合路径 + 严上限 mode
+    fw = [e for e in events if e["class"] == "file-write" and e.get("path")]
+    if fw:
+        import posixpath
+
+        paths = sorted({posixpath.dirname(e["path"]) or "/" for e in fw})
+        modes = {e.get("mode") for e in fw}
+        if "overwrite" in modes:
+            mode = "overwrite"
+        elif "append" in modes:
+            mode = "append"
+        else:
+            mode = "create"
+        allow = [c for c in allow if c != "file-write"]
+        allow.append({"class": "file-write", "mode": mode, "paths": paths})
+
+    deny = sorted((known - set(observed)) | {"other"})
     claims = {"allow": allow, "deny": deny}
 
     manifest["claims"] = claims
