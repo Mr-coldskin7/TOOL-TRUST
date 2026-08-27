@@ -29,6 +29,21 @@ NOISE_PREFIXES = (
     "/sys/",
     "/dev/",
     "/var/lib/dpkg",
+    # 容器内观察路径（/src = 工具源码挂载点），不属于 host 前置依赖
+    "/src",
+    # python 解释器运行时内部（stdlib/site-packages/解释器查找），不是 host 前置依赖
+    "/usr/bin/python3",
+    "/usr/local/bin/python3",
+    "/usr/local/sbin/python3",
+    "/usr/sbin/python3",
+    "/usr/local/lib/python3",
+    "/usr/lib/python3",
+    "/usr/bin/lib/python3",
+    "/root/.local",
+    "/etc/hosts",
+    "/etc/host.conf",
+    "/etc/gai.conf",
+    "/usr/share/locale",
 )
 # 工具自己的编译产物/工具链，不当作 host exec 依赖
 _TOOLCHAIN = ("g++", "gcc", "cc", "ld", "as", "make", "clang", "clang++")
@@ -144,7 +159,8 @@ def infer_requires(events: list[dict]) -> dict:
                 files.add(p)
         elif c == "exec":
             p = _quoted_path(e.get("args") or "")
-            if p and not _is_noise(p) and not p.endswith(_TOOLCHAIN):
+            if p and not p.endswith(_TOOLCHAIN):
+                # exec 只滤工具链；解释器/真实子进程二进制是有意义的前置，不滤系统噪音
                 exes.add(p)
 
     return {"env": [], "files": sorted(files), "exec": sorted(exes)}

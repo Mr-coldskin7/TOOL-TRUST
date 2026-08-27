@@ -82,7 +82,19 @@ _SYNC_SYSCALLS = {
     "sched_getaffinity",
     "getcpu",
     "getppid",
+    # 信号处理 + 身份/系统信息（python3 运行时高频出现，属安全噪音）
+    "rt_sigaction",
+    "rt_sigprocmask",
+    "sigaction",
+    "sigprocmask",
+    "getuid",
+    "geteuid",
+    "getgid",
+    "getegid",
+    "uname",
 }
+# 文件系统元信息探询（读性质，非写）
+_FS_INSPECT = {"getcwd", "readlinkat"}
 _FD_SYSCALLS = {
     "close",
     "dup",
@@ -106,12 +118,39 @@ _FD_SYSCALLS = {
     "shutdown",
     "lseek",
     "lseek64",
+    "getsockname",
+    "getpeername",
 }
 
 _FD_RE = re.compile(r"^\s*(\d+)")
 _PATH_RE = re.compile(r'"([^"]*)"')
 # 这些 syscall 的参数第一个不是路径（write(fd,..) 的内容里可能含引号字符串）
 _NO_PATH_SYSCALLS = {"write", "writev", "pwrite", "pwritev", "sendfile", "sendfile64"}
+
+# fd 路由追踪：这些 syscall 返回 fd / 参数首项是 fd
+_FD_RETURN = {"socket", "socketpair", "open", "openat", "openat2", "creat"}
+_FD_DUP = {"dup", "dup2", "dup3"}
+_FD_OPS = {
+    "write", "writev", "pwrite", "pwritev", "sendfile",
+    "read", "readv", "pread", "preadv",
+    "recv", "recvfrom", "recvmsg", "recvmmsg",
+    "send", "sendto", "sendmsg", "sendmmsg",
+}
+
+
+def _first_fd(args: str) -> int | None:
+    m = _FD_RE.match(args or "")
+    return int(m.group(1)) if m else None
+
+
+def _ret_fd(ret: str) -> int | None:
+    """成功返回的 fd（负数/‘?’/未知均 None）。"""
+    if not ret:
+        return None
+    r = ret.split()[0]
+    if r == "?" or r.startswith("-") or not r.isdigit():
+        return None
+    return int(r)
 
 # 声明模式可接受的意图模式（create 最受限，overwrite 全接受）
 MODE_ALLOWS = {
@@ -157,6 +196,8 @@ def classify(syscall: str, args: str) -> str:
         return "file-write"
     if syscall in _READ_SYSCALLS:
         return "file-read"
+    if syscall in _FS_INSPECT:
+        return "file-read"
     if syscall in _OPEN_SYSCALLS:
         return "file-write" if _open_flags_write(args) else "file-read"
     if syscall in _NETWORK_SYSCALLS:
@@ -176,6 +217,42 @@ def classify(syscall: str, args: str) -> str:
     if syscall in _FD_SYSCALLS:
         return "fd"
     return "other"
+
+
+def route_fds(events: list[dict]) -> None:
+    """状态化 fd 路由：跟踪 socket/open 返回的 fd 类型，归正 fd 操作的 class。
+
+    修一个真实发现：SSL 往 socket fd 写数据（write(3,...)，fd 既非 1 也非 2）
+    会被 classify 误判成 file-write，把网络流量当文件写入。跟踪后：
+      socket()=3  → 3:net；open()=4 → 4:file；dup/close 维护表。
+    之后 write/read(3) → network；write/read(4) → file-write/file-read。
+    多进程：每 pid 一张表（strace -f）；fork 继承略过（边界情况可接受）。
+    """
+    tables: dict[int, dict[int, str]] = {}
+    for e in events:
+        ctx = tables.setdefault(e["pid"], {})
+        sc, args, ret = e["syscall"], e.get("args") or "", e.get("ret")
+        fd = _ret_fd(ret)
+        if sc in _FD_RETURN and fd is not None:
+            ctx[fd] = "net" if sc in ("socket", "socketpair") else "file"
+        elif sc in _FD_DUP:
+            m = re.match(r"^\s*(\d+),\s*(\d+)", args)
+            if m:
+                src, dst = int(m.group(1)), int(m.group(2))
+                ctx[dst] = ctx.get(src, "unknown")
+        elif sc == "close":
+            f = _first_fd(args)
+            if f is not None:
+                ctx.pop(f, None)
+
+        if sc in _FD_OPS and e["class"] in ("file-write", "file-read", "network"):
+            f = _first_fd(args)
+            if f is not None:
+                k = ctx.get(f, "unknown")
+                if k == "net":
+                    e["class"] = "network"
+                elif k == "file":
+                    e["class"] = "file-write" if sc in {"write", "writev", "pwrite", "pwritev", "sendfile"} else "file-read"
 
 
 def _open_flags_write(args: str) -> bool:

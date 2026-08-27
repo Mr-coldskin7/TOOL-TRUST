@@ -1,6 +1,6 @@
 """消费决策闸 gate：agent 在 bash runtime 里调用工具前的把关（决策时，非 per-call 沙箱）。
 
-tool-trust 的产品是 attestation report（体检证书），不是"每次调用都加锁/隔离"。
+tool-trust 的产出是 attestation report（体检证书），不是"每次调用都加锁/隔离"。
 真实运行属于工具所在的 runtime agent（bash）本身，这里只做**决策时**把关：
 
   闸 1　attestation 校验　：缓存报告 verdict=fail → 直接拒绝，不让它被使用/运行
@@ -13,6 +13,7 @@ tool-trust 的产品是 attestation report（体检证书），不是"每次调�
 """
 import json
 import pathlib
+import shutil
 import subprocess
 
 from attest import prereq, telemetry
@@ -60,8 +61,11 @@ def decide(manifest: dict, tool_dir: pathlib.Path) -> dict:
 def format_command(manifest: dict, inputs: list[str], tool_dir: pathlib.Path) -> list[str]:
     """命令 + 输入 → argv。相对命令基于工具目录解析（工具以此目录为 cwd 运行）。"""
     cmd = manifest["command"].split()
-    if cmd and not pathlib.Path(cmd[0]).is_absolute():
-        cmd[0] = str(tool_dir / cmd[0])
+    if cmd:
+        first = cmd[0]
+        if not pathlib.Path(first).is_absolute() and shutil.which(first) is None:
+            # 相对工具目录的命令(如 ./test) → 拼完整路径；PATH 可执行(python3)不动
+            cmd[0] = str(tool_dir / first)
     return cmd + inputs
 
 

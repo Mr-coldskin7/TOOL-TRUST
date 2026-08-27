@@ -1,4 +1,4 @@
-from attest.rules import classify, write_attrs
+from attest.rules import classify, route_fds, write_attrs
 
 
 def test_write_fd_is_stdout_not_file_write():
@@ -77,3 +77,53 @@ def test_write_attrs_rdonly_open_is_create_but_ok():
     p, m = write_attrs("openat", 'AT_FDCWD, "/tmp/x", O_RDONLY')
     assert p == "/tmp/x"
     assert m == "create"
+
+
+# ---- fd 路由：socket fd 的 write/read 归正为 network ----
+
+def _re(pid, sc, args, ret):
+    return {"pid": pid, "syscall": sc, "args": args, "ret": ret, "class": classify(sc, args)}
+
+
+def test_socket_write_is_network_not_file_write():
+    events = [
+        _re(1, "socket", "AF_INET, SOCK_STREAM", "3"),
+        _re(1, "connect", "3, {sa_family=AF_INET, sin_port=htons(443)}", "0"),
+        _re(1, "write", '3, "\\x16\\x03\\x01...", 517', "517"),
+        _re(1, "read", '3, "\\x16\\x03\\x01...", 832', "42"),
+    ]
+    route_fds(events)
+    assert events[0]["class"] == "network"
+    assert events[2]["class"] == "network"  # SSL 写 socket 不再当 file-write
+    assert events[3]["class"] == "network"
+
+
+def test_file_write_stays_file_write():
+    events = [
+        _re(1, "openat", 'AT_FDCWD, "/tmp/x", O_WRONLY|O_CREAT, 0644', "4"),
+        _re(1, "write", '4, "data", 4', "4"),
+    ]
+    route_fds(events)
+    assert events[1]["class"] == "file-write"
+
+
+def test_dup_copies_fd_kind():
+    events = [
+        _re(1, "socket", "AF_INET, SOCK_STREAM", "3"),
+        _re(1, "dup", "3, 5", "5"),
+        _re(1, "write", '5, "x", 1', "1"),
+    ]
+    route_fds(events)
+    assert events[1]["class"] == "fd"
+    assert events[2]["class"] == "network"
+
+
+def test_close_removes_fd_kind():
+    events = [
+        _re(1, "socket", "AF_INET, SOCK_STREAM", "3"),
+        _re(1, "close", "3", "0"),
+        _re(1, "write", '3, "x", 1', "1"),
+    ]
+    route_fds(events)
+    # close 后 fd 类型未知 → 保持 classify 的保守默认(file-write)
+    assert events[2]["class"] == "file-write"

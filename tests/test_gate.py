@@ -37,6 +37,13 @@ def test_format_command_keeps_absolute():
     assert format_command(m, [], pathlib.Path("/t")) == ["/bin/echo", "hi"]
 
 
+def test_format_command_keeps_path_executable(monkeypatch, tmp_path):
+    # PATH 上的可执行(python3/sh)不能被拼成相对工具目录路径
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    m = {"command": "python3 quote.py"}
+    assert format_command(m, [], tmp_path) == ["python3", "quote.py"]
+
+
 def test_load_attestation_verdict(tmp_path):
     (tmp_path / "report.json").write_text(json.dumps({"verdict": "fail"}))
     assert load_attestation_verdict(tmp_path) == "fail"

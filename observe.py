@@ -34,6 +34,7 @@ def annotate(events: list[dict]) -> None:
         e["class"] = rules.classify(e["syscall"], e["args"])
         if e["class"] == "file-write":
             e["path"], e["mode"] = rules.write_attrs(e["syscall"], e["args"])
+    rules.route_fds(events)  # 状态化 fd 路由：socket fd 的 write/read 归正为 network
 
 
 def observe(tool: str, inputs: list[str]) -> dict:
