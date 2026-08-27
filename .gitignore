@@ -17,3 +17,6 @@ tools/*/evil-overwrite
 # Attest observation temp
 .obs/
 .pi/
+
+# Telemetry / runtime state
+runtime/

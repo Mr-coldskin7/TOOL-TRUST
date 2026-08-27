@@ -15,7 +15,7 @@ import json
 import pathlib
 import subprocess
 
-from attest import prereq
+from attest import prereq, telemetry
 
 
 def load_attestation_verdict(tool_dir: pathlib.Path) -> str | None:
@@ -36,19 +36,25 @@ def decide(manifest: dict, tool_dir: pathlib.Path) -> dict:
     # 闸 1：attestation 判 fail → 拒绝
     verdict = load_attestation_verdict(tool_dir)
     if verdict == "fail":
-        return {"decision": "deny", "reason": "attestation-fail", "tool": manifest["name"]}
+        d = {"decision": "deny", "reason": "attestation-fail", "tool": manifest["name"]}
+        telemetry.log_run({"event": "decide", **d})
+        return d
 
     # 闸 2：requires 硬拒 —— 缺任一前置 → 拒绝，省 token/算力
     check = prereq.hard_check(manifest.get("requires"), cwd=str(tool_dir))
     if check["verdict"] != "pass":
-        return {
+        d = {
             "decision": "deny",
             "reason": "env-mismatch",
             "tool": manifest["name"],
             **check,
         }
+        telemetry.log_run({"event": "decide", **d})
+        return d
 
-    return {"decision": "allow", "reason": "ok", "tool": manifest["name"]}
+    d = {"decision": "allow", "reason": "ok", "tool": manifest["name"]}
+    telemetry.log_run({"event": "decide", **d})
+    return d
 
 
 def format_command(manifest: dict, inputs: list[str], tool_dir: pathlib.Path) -> list[str]:
@@ -74,11 +80,38 @@ def gated_invoke(
         return {"tool": manifest["name"], **d, "output": ""}
 
     argv = format_command(manifest, inputs, tool_dir)
-    result = subprocess.run(argv, capture_output=True, text=True, cwd=str(tool_dir))
-    return {
+    try:
+        result = subprocess.run(argv, capture_output=True, text=True, cwd=str(tool_dir))
+    except OSError as exc:
+        # 启动失败（二进制不存在/平台不匹配等）：结构化返回 + 记日志，不抛裸异常
+        out = {
+            "tool": manifest["name"],
+            "decision": "allow",
+            "launch_error": f"{type(exc).__name__}: {exc}",
+            "returncode": None,
+            "stdout": "",
+            "stderr": "",
+        }
+        telemetry.log_run(
+            {"event": "invoke", "tool": out["tool"], "launch_error": out["launch_error"]}
+        )
+        return out
+    out = {
         "tool": manifest["name"],
         "decision": "allow",
         "returncode": result.returncode,
         "stdout": result.stdout.strip(),
         "stderr": result.stderr.strip(),
     }
+    telemetry.log_run(
+        {
+            "event": "invoke",
+            "tool": out["tool"],
+            "decision": out["decision"],
+            "returncode": out["returncode"],
+            "stdout_len": len(out["stdout"]),
+            "stderr_len": len(out["stderr"]),
+            "inputs": inputs,
+        }
+    )
+    return out

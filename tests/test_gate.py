@@ -1,7 +1,10 @@
 import json
 import pathlib
 
+import pytest
+
 from attest.gate import decide, format_command, gated_invoke, load_attestation_verdict
+from attest.telemetry import log_run
 
 
 def _script(tool_dir: pathlib.Path, name: str, body: str) -> pathlib.Path:
@@ -92,3 +95,44 @@ def test_gated_invoke_allow_runs_in_runtime(tmp_path):
     assert r["decision"] == "allow"
     assert r["returncode"] == 0
     assert r["stdout"] == "harness-ok"
+
+
+def test_gated_invoke_launch_error_is_structured_not_raised(tmp_path):
+    # 二进制不存在/平台不匹配(如 Linux ELF 在 mac) → 结构化返回 launch_error，不抛裸异常
+    r = gated_invoke(_manifest(command="./no_such_bin"), [], tmp_path)
+    assert r["decision"] == "allow"
+    assert "launch_error" in r
+    assert "No such file" in r["launch_error"]
+
+
+# ---- telemetry：每次决策/调用落日志 ----
+
+def test_decide_logs_to_telemetry(tmp_path, monkeypatch):
+    log = tmp_path / "access.jsonl"
+    monkeypatch.setenv("TOOL_TRUST_TELEMETRY", str(log))
+    decide(_manifest(), tmp_path)
+    lines = log.read_text().splitlines()
+    assert len(lines) == 1
+    rec = json.loads(lines[0])
+    assert rec["event"] == "decide"
+    assert rec["decision"] == "allow"
+    assert "ts" in rec
+
+
+def test_invoke_logs_event_and_deny_does_not(tmp_path, monkeypatch):
+    log = tmp_path / "access.jsonl"
+    monkeypatch.setenv("TOOL_TRUST_TELEMETRY", str(log))
+    out = _script(tmp_path, "tool.sh", "echo hi")
+    gated_invoke(_manifest(command=str(out)), ["x"], tmp_path)
+    recs = [json.loads(l) for l in log.read_text().splitlines()]
+    events = [r["event"] for r in recs]
+    assert events == ["decide", "invoke"]
+    inv = recs[1]
+    assert inv["returncode"] == 0
+    assert inv["inputs"] == ["x"]
+
+
+def test_log_run_ignores_failure(tmp_path, monkeypatch):
+    # telemetry 写失败(如路径不存在)不阻断主流程
+    log_run({"x": 1}, path=tmp_path / "no" / "such" / "dir" / "a.jsonl")
+    assert True
