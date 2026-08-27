@@ -19,15 +19,22 @@ cli tool虽然方便，但是其一各个写的标准不同，像是read_file一
 
 ## 当前状态（2026-08）
 
-当前阶段不是写 attestation 本体，而是先打通：**任意语言/脚本的工具如何被 MCP agent 调用**。这条管道走通后，attestation 逻辑才有承载它的 MCP 载体。
+核心方向：**attestation report = 体检证书，是决策输入；真实运行属于工具所在的 bash runtime。**
+
+> 设计裁定：不做 per-call 沙箱隔离（bwrap/sandbox-exec 每调用加锁）——工具本就活在 runtime
+> agent 的 bash 语境里，再套内核锁是过度设计。Docker+strace **只在体检阶段**隔离，为了发现真相；
+> 上岗阶段 agent 读报告 + requires 硬拒 + claims 决策契约，在 **决策时**把关。注意：一次 strace 观察
+> 是行为采样，不是能力上界；报告给它"大致画像"，requires 确认当前 runtime 跑得动，越界由
+> claims/consequences 在调用前把关。
 
 已完成：
 
-- ✅ FastMCP 概念打通：server 组件、Pydantic 自动 schema、工具参数限制
-- ✅ C++ 二进制 → FastMCP 工具（subprocess 包装）
-- ✅ `register-tool` 项目 skill：用户说一句话，LLM 完成"源码 → 编译 → 包装 → 验证"全流程
-- ✅ `tools/` 目录即注册表，`server.py` 启动自动加载
-- ✅ 第一个工具 `cpp-test`（C++ 转大写），端到端验证通过
+- ✅ **体检管道**：Docker 沙箱 + strace → `observe.py` 产出 JSON attestation report
+- ✅ **claims 三级对账**：`file-write` 从"一个字"升级为 `class + mode(create/append/overwrite) + paths(白名单)`，对账 class → paths → mode 三级，deny 优先
+- ✅ **requires 前置条件**：`--generate-requires` 从 strace 反推（env/files/exec/cwd/writable，滤系统噪音）；`--check-requires` 硬校验
+- ✅ **决策闸 gate**：缓存报告 verdict=fail → 拒绝；requires 缺任一 → 硬拒(env-mismatch)，不运行省 token；通过则交 runtime 正常执行
+- ✅ **server 消费闸门**：注册前跳过 attestation 判 fail 的工具（agent 看不到）
+- ✅ `cpp-test`（C++ 转大写）端到端验证；`evil-write`/`evil-overwrite` 作为越界测试钳
 
 ## 快速开始
 
@@ -56,22 +63,29 @@ LLM 会代你完成：写源码 → 编译 → 生成 wrapper + manifest → 冒
 ## 目录结构
 
 ```
-.claude/skills/register-tool/   # 注册 skill：指令 + 模板
-tools/                          # 注册表 = 目录，每工具一个子目录
-  cpp-test/                     # 示例：C++ 转大写
-    test.cpp                    #   源码
-    test                        #   编译产物（gitignore）
-    tool.py                     #   FastMCP wrapper
-    tool.yaml                   #   manifest（只存语义，不存类型）
-server.py                       # 自动加载 tools/*/tool.py
+attest/                         # 体检 + 决策逻辑
+  run.py / build.py             #   Docker 沙箱、编译
+  parse.py / rules.py           #   strace 解析、syscall→class 归类
+  reconcile.py                  #   claims 三级对账(class→paths→mode)
+  report.py                     #   JSON attestation report 组装
+  prereq.py                     #   requires 硬校验 + 从 strace 反推
+  gate.py                       #   决策闸(attestation 校验 + requires 硬拒)
+observe.py                      # 体检 CLI（--generate-claims/requires、--check-requires）
+server.py                       # 自动加载 tools/*/tool.py，注册前跳过 fail
 client.py                       # 冒烟客户端
-docs/superpowers/               # 设计 spec + 实施计划
+tools/                          # 注册表 = 目录，每工具一个子目录
+  cpp-test/                     # 示例：C++ 转大写（tool.py + tool.yaml + report.json）
+  evil-write/ evil-overwrite/   # 越界测试钳
 ```
 
 ## 路线图
 
+- [x] attestation 本体：Docker 沙箱 + strace 观察 vs manifest 对账，产出 JSON report
+- [x] claims 结构化：file-write 的 mode + paths 白名单，三级对账
+- [x] requires 前置条件：自动反推 + 硬校验（省 token/算力）
+- [x] 决策闸 gate + server 消费闸门（拒绝 fail 工具、requires 硬拒）
+- [ ] 真实运行形态确定：runtime agent 在 bash 里用报告 + 决策闸把关
 - [ ] 第二个语言工具（TS / Python / Java），验证 register-tool 通用性
 - [ ] manifest 全量驱动：加工具只加 `tool.yaml`，Python 层零改动
-- [ ] 熵减：`tools/` 工具健康扫描（去重/分类/归档），LLM 建议、用户确认
-- [ ] attestation 本体：Docker 沙箱 + strace 观察 vs manifest 对账，产出 JSON attestation report
+- [ ] `tools/` 工具健康扫描（去重/分类/归档），LLM 建议、用户确认
 - [ ] AGENTS.md 变体，让 Codex 也能跑注册流程

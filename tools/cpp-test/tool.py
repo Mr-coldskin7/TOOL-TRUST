@@ -1,16 +1,16 @@
-import subprocess
+import pathlib
 from fastmcp import FastMCP
+import yaml
+
+from attest import gate
+
+_TOOL_DIR = pathlib.Path(__file__).resolve().parent
 
 
 def register(mcp: FastMCP) -> None:
+    manifest = yaml.safe_load((_TOOL_DIR / "tool.yaml").read_text())
+
     @mcp.tool
-    def cpp_test(message: str) -> str:
-        """把输入消息转大写输出（C++ 二进制）"""
-        result = subprocess.run(
-            ["./tools/cpp-test/test", message],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(result.stderr.strip() or f"exit {result.returncode}")
-        return result.stdout.strip()
+    def cpp_test(message: str) -> dict:
+        """把输入消息转大写输出（C++ 二进制）。经决策闸：attestation 校验 + requires 硬拒"""
+        return gate.gated_invoke(manifest, [message], _TOOL_DIR)
