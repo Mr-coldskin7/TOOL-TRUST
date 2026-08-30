@@ -19,15 +19,26 @@ description: 用户说一句话，LLM 完成把一个脚本/语言注册成 Fast
 1. **定语义**：从自然语言或代码确定——语言、运行命令、参数、输出。不确定就问用户一句（一次一个问题）。
 2. **写源码**：在 `tools/<name>/` 写源码（或直接用用户贴的）。name = 小写短横线。
 3. **编译/定命令**：
-   - C++: `g++ <src>.cpp -o <name>` → command = `./tools/<name>/<name>`
-   - TS: command = `npx tsx tools/<name>/<name>.ts`（或先编译）
-   - Python: command = `python3 tools/<name>/<name>.py`
-   - Java: command = `java -jar tools/<name>/<name>.jar`
-4. **生成 tool.yaml**：只存 `name / description / command`。不存参数类型。
-5. **生成 tool.py**：真实类型签名。简单参数直接注解；复杂参数（嵌套/list/自定义）写 Pydantic model，函数内序列化成 JSON 喂二进制。用 templates/tool.py.tmpl 结构，必须暴露 `register(mcp)`。
+   - C++: `g++ <src>.cpp -o <name>` → command = `./tools/<name>/<name>`；build = 同一条 g++
+   - Python: command = `python3 tools/<name>/<name>.py`；build = `true`（无编译）
+   - TS: command = `npx tsx tools/<name>/<name>.ts`（或先编译）；build = 对应编译命令
+   - Shell: command = `sh tools/<name>/<name>.sh`；build = `true`；需要 `chmod +x`
+4. **生成 tool.yaml**：用 templates/tool.yaml.tmpl。联网工具**必须**把 `network` 收窄成
+   `class: network, hosts: [...]`（白名单真实端点，禁止裸 `network`）；写文件工具**必须**
+   带 `mode + paths` 白名单；无副作用工具保持模板的 deny 默认。`requires.exec` 写运行时。
+5. **生成 tool.py**：用 templates/tool.py.tmpl（gate 决策闸包装，参数顺序需与 tool.yaml 的 `inputs` 一致）。
 6. **手动跑二进制**：直接执行 command，确认输出符合描述。
-7. **client 冒烟**：写/改 client 调用，确认 MCP 返回正确。C++ 二进制记得带 `./` 前缀。
-8. **汇报**："已注册，可调用 <函数名>，参数：<类型>"。
+7. **体检建档（必经）**：
+   ```bash
+   uv run python observe.py <name> --generate-claims <样例输入>
+   uv run python observe.py <name> --generate-requires <样例输入>
+   uv run python observe.py <name> <样例输入>   # 确认 verdict=pass
+   ```
+   - 若生成覆盖了 hosts/mode+paths 白名单，**改回收窄声明再复检**
+   - verdict 必须 pass 才算完成注册；fail 要修到 pass
+   - 联网工具注意：claims 里 network 若带 hosts，复检会核对连接目标（DNS/本机豁免）
+8. **client 冒烟**：写/改 client 调用，确认 MCP 返回正确。C++ 二进制记得带 `./` 前缀。
+9. **汇报**："已注册，可调用 <函数名>，参数：<类型>，attestation pass"。
 
 ## 熵减（可选）
 

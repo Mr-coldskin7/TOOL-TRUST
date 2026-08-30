@@ -1,4 +1,23 @@
-# .claude/skills/register-tool/templates/tool.yaml.tmpl
 name: {{ name }}
 description: {{ description }}
+base_image: attest-base:latest
+build: {{ build }}
 command: {{ command }}
+inputs: [{{ inputs }}]
+claims:
+  allow:
+    - file-read
+    - stdout
+    - stderr
+    - exit
+    - memory
+    - sync
+    - fd
+    # - class: network
+    #   hosts: [example.com]      # 联网工具：声明白名单 host（务必收窄！）
+    # - class: file-write
+    #   mode: create
+    #   paths: [/tmp/]            # 写文件工具：必须 mode + paths 白名单
+  deny: [exec, file-write, network, perms, process, other]
+requires:
+  exec: [{{ runtime }}]
