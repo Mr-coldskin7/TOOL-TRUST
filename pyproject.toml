@@ -12,6 +12,7 @@ dependencies = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = ["slow: tests that run Docker or network"]
 
 [dependency-groups]
 dev = [

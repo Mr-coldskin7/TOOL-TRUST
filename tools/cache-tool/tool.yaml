@@ -26,13 +26,6 @@ claims:
   - process
   - stderr
 requires:
-  env: []
-  files:
-  - /tmp/cache.log
-  - /usr/bin/Modules/Setup.local
-  - /usr/bin/pybuilddir.txt
-  - /usr/bin/pyvenv.cfg
-  - /usr/pyvenv.cfg
-  exec: []
+  exec: [python3]
   writable:
   - /tmp
