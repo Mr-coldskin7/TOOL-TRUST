@@ -20,3 +20,7 @@ tools/*/evil-overwrite
 
 # Telemetry / runtime state
 runtime/
+
+# 个人工具（不进 git，本地可用但绝不公开）
+/tools/cityu-mail/
+/tools/us-news/

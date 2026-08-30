@@ -1,4 +1,5 @@
 """docker run：容器内 strace 全量跟踪工具运行。"""
+import os
 import pathlib
 import shutil
 import subprocess
@@ -30,6 +31,12 @@ def run_tool(manifest: dict, tool_dir: pathlib.Path, inputs: list[str]) -> str:
             "/src",
             "-v",
             f"{obs_dir.resolve()}:/obs",
+        ]
+        # repository: true —— 工具要操作宿主仓库：把观察时的工作目录只读挂进 /repo
+        if manifest.get("repository"):
+            repo = pathlib.Path(os.getcwd()).resolve()
+            cmd += ["-v", f"{repo}:/repo:ro"]
+        cmd += [
             manifest["base_image"],
             "strace",
             "-f",
