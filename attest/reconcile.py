@@ -10,6 +10,7 @@
 
 其它无副作用 class（stdout/exit/file-read…）只需过第一关。
 """
+import posixpath
 import socket
 
 from attest.rules import MODE_ALLOWS
@@ -27,7 +28,18 @@ def _normalize_allow(allow: list) -> list[dict]:
 
 
 def _path_in_paths(path: str, paths: list[str]) -> bool:
-    return any(path.startswith(p) for p in paths)
+    """路径白名单判定：normpath 折叠 `..` + 目录边界。
+
+    防真实逃逸洞：白名单只声明 `/tmp/`，攻击者写 `/tmp/../etc/x` 时内核会
+    normalize 成 `/etc/x`，旧式 startswith 判定会放行。现在先 normpath，
+    再用精确目录边界(`base` 或 `base + "/"`)匹配。
+    """
+    p = posixpath.normpath(path)
+    for pref in paths:
+        base = posixpath.normpath(pref)
+        if p == base or p.startswith(base + "/"):
+            return True
+    return False
 
 
 def _default_resolver(hosts: list[str]) -> set[str]:

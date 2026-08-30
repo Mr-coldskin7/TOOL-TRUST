@@ -1,0 +1,31 @@
+name: fx-rate
+description: 汇率换算（open.er-api.com，无 key）：USD→HKD 等
+base_image: attest-base:latest
+build: 'true'
+command: python3 fx.py
+inputs:
+- frm
+- to
+- amount
+claims:
+  allow:
+  - exit
+  - fd
+  - file-read
+  - memory
+  - class: network
+    hosts:
+    - open.er-api.com
+  - stdout
+  - sync
+  deny:
+  - exec
+  - file-write
+  - fork
+  - other
+  - perms
+  - process
+  - stderr
+requires:
+  exec:
+  - python3
