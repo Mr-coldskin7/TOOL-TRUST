@@ -56,10 +56,12 @@ def _summarize(ticker: str, meta: dict) -> dict:
 
 def main() -> int:
     if len(sys.argv) < 2:
-        print("usage: quote.py <TICKER>", file=sys.stderr)
+        print("usage: quote.py <TICKER[,TICKER...]>", file=sys.stderr)
         return 2
+    tickers = [t.strip() for t in sys.argv[1].split(",") if t.strip()]
     try:
-        print(json.dumps(fetch(sys.argv[1]), ensure_ascii=False))
+        results = [fetch(t) for t in tickers]
+        print(json.dumps(results if len(results) > 1 else results[0], ensure_ascii=False))
         return 0
     except Exception as exc:  # noqa: BLE001 —— CLI 边界统一兜底
         print(f"error: {exc}", file=sys.stderr)

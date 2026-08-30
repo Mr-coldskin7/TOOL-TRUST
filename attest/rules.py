@@ -124,6 +124,9 @@ _FD_SYSCALLS = {
 
 _FD_RE = re.compile(r"^\s*(\d+)")
 _PATH_RE = re.compile(r'"([^"]*)"')
+# 网络目标提取：strace connect 显示 {sa_family=AF_INET, sin_port=htons(443), sin_addr=inet_addr("1.1.1.1")}
+_SIN_PORT_RE = re.compile(r"sin_port=htons\((\d+)\)")
+_SIN_ADDR_RE = re.compile(r'inet_addr\("([^"]+)"\)')
 # 这些 syscall 的参数第一个不是路径（write(fd,..) 的内容里可能含引号字符串）
 _NO_PATH_SYSCALLS = {"write", "writev", "pwrite", "pwritev", "sendfile", "sendfile64"}
 
@@ -217,6 +220,15 @@ def classify(syscall: str, args: str) -> str:
     if syscall in _FD_SYSCALLS:
         return "fd"
     return "other"
+
+
+def net_attrs(args: str) -> tuple[str | None, int | None]:
+    """从网络 syscall args 提取（目标 IP, 端口）。解析不到返回 None。"""
+    m = _SIN_ADDR_RE.search(args or "")
+    ip = m.group(1) if m else None
+    mp = _SIN_PORT_RE.search(args or "")
+    port = int(mp.group(1)) if mp else None
+    return ip, port
 
 
 def route_fds(events: list[dict]) -> None:

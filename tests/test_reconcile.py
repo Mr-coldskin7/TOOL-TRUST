@@ -99,3 +99,39 @@ def test_filename_prefix_not_confused_with_dir():
     v = reconcile([ev], {"allow": decl, "deny": []})
     assert len(v) == 1
     assert v[0]["reason"] == "out-of-scope"
+
+
+# ---- network.hosts：白名单对账 ----
+
+def _net_ev(ip="1.1.1.1", port=443):
+    return {"class": "network", "syscall": "connect", "ip": ip, "port": port, "args": f'3, {{sa_family=AF_INET, sin_port=htons({port}), sin_addr=inet_addr("{ip}")}}'}
+
+
+def _fake_resolver(hosts):
+    table = {"yahoo.com": {"1.1.1.1"}}
+    return {ip for h in hosts for ip in table.get(h, set())}
+
+
+def test_network_plain_claim_passes_without_hosts():
+    v = reconcile([_net_ev()], {"allow": ["network"], "deny": []})
+    assert v == []
+
+
+def test_network_hosts_match_passes():
+    claims = {"allow": [{"class": "network", "hosts": ["yahoo.com"]}], "deny": []}
+    assert reconcile([_net_ev("1.1.1.1")], claims, resolver=_fake_resolver) == []
+
+
+def test_network_hosts_mismatch_is_violation():
+    claims = {"allow": [{"class": "network", "hosts": ["yahoo.com"]}], "deny": []}
+    v = reconcile([_net_ev("8.8.4.4")], claims, resolver=_fake_resolver)
+    assert len(v) == 1
+    assert v[0]["reason"] == "net-out-of-scope"
+    assert "8.8.4.4" in v[0]["detail"]
+
+
+def test_network_ip_less_event_skipped():
+    # 无目标 IP 的事件(DNS sendto/握手)不参与 hosts 核对
+    claims = {"allow": [{"class": "network", "hosts": ["yahoo.com"]}], "deny": []}
+    ev = {"class": "network", "syscall": "sendmsg", "args": "x"}
+    assert reconcile([ev], claims, resolver=_fake_resolver) == []

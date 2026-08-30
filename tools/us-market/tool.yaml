@@ -1,0 +1,31 @@
+name: us-market
+description: 美股技术面快照（Yahoo OHLCV）：MA20/50/200、30/60日区间位置%、14日动能、52周位置
+base_image: attest-base:latest
+build: 'true'
+command: python3 market.py
+inputs:
+- ticker
+- range
+- interval
+claims:
+  allow:
+  - exit
+  - fd
+  - file-read
+  - memory
+  - class: network
+    hosts:
+    - query1.finance.yahoo.com
+    - query2.finance.yahoo.com
+  - stdout
+  - sync
+  deny:
+  - exec
+  - file-write
+  - other
+  - perms
+  - process
+  - stderr
+requires:
+  exec:
+  - python3

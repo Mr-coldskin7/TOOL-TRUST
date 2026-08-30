@@ -12,7 +12,8 @@ claims:
   - fd
   - file-read
   - memory
-  - network
+  - class: network
+    hosts: [query1.finance.yahoo.com, query2.finance.yahoo.com]
   - stdout
   - sync
   deny:
