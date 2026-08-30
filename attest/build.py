@@ -1,21 +1,33 @@
 """docker build：容器内编译工具 + mtime 缓存。"""
-import pathlib
+import posixpath
 import re
 import subprocess
+import tempfile
+import pathlib
 
-_BASE_DOCKERFILE = pathlib.Path(__file__).parent.parent / "docker" / "attest-base"
+_BASE_DOCKERFILE = """\
+# attest 观察管道 base 镜像：工具链 + strace + 语言运行时
+FROM ubuntu:24.04
+RUN apt-get update && apt-get install -y --no-install-recommends \\
+    g++ gcc strace python3 ca-certificates \\
+    && rm -rf /var/lib/apt/lists/*
+"""
 _BUILD_OUT_RE = re.compile(r"-o\s+(\S+)")
 
 EXCLUDED = {"tool.py", "tool.yaml", "obs.txt"}
 
 
 def ensure_base_image(base_image: str) -> None:
-    """检查 base 镜像存在，缺失则从 docker/attest-base 构建。"""
+    """检查 base 镜像存在，缺失则用内联 Dockerfile 临时构建（不再依赖仓库里的 docker/ 目录）。"""
     if _image_exists(base_image):
         return
-    subprocess.run(
-        ["docker", "build", "-t", base_image, str(_BASE_DOCKERFILE)], check=True
-    )
+    with tempfile.TemporaryDirectory() as td:
+        df = pathlib.Path(td) / "Dockerfile"
+        df.write_text(_BASE_DOCKERFILE)
+        subprocess.run(
+            ["docker", "build", "-t", base_image, td],
+            check=True,
+        )
 
 
 def _image_exists(name: str) -> bool:

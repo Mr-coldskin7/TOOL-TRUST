@@ -18,6 +18,11 @@ tools/*/evil-overwrite
 .obs/
 .pi/
 
+# Removed temporary directories (kept locally if needed, not committed)
+docs/superpowers/
+examples/env-exit/
+docker/attest-base/
+
 # Telemetry / runtime state
 runtime/
 
