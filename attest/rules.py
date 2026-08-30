@@ -8,6 +8,7 @@ SEVERITY = {
     "exec": "high",
     "perms": "high",
     "process": "medium",
+    "fork": "low",
     "file-read": "low",
     "stdout": "low",
     "stderr": "low",
@@ -50,7 +51,10 @@ _NETWORK_SYSCALLS = {
     "recvmmsg",
 }
 _EXEC_SYSCALLS = {"execve", "execveat"}
-_PROCESS_SYSCALLS = {"kill", "ptrace", "clone", "clone3", "fork", "vfork", "tgkill"}
+# 危险进程操作：杀/调试/注入。创建子进程(fork/clone)另归 fork 类。
+_PROCESS_SYSCALLS = {"kill", "ptrace", "tgkill"}
+# 创建子进程：shell 管道/脚本必用，良性（子进程行为由 strace -f 跟踪）
+_FORK_SYSCALLS = {"clone", "clone3", "fork", "vfork"}
 _PERMS_SYSCALLS = {"chmod", "fchmod", "chown", "fchown", "mount", "symlink", "mknod"}
 _FS_WRITE_SYSCALLS = {
     "mkdir",
@@ -82,6 +86,9 @@ _SYNC_SYSCALLS = {
     "sched_getaffinity",
     "getcpu",
     "getppid",
+    "rt_sigreturn",
+    "wait4",
+    "waitid",
     # 信号处理 + 身份/系统信息（python3 运行时高频出现，属安全噪音）
     "rt_sigaction",
     "rt_sigprocmask",
@@ -120,6 +127,8 @@ _FD_SYSCALLS = {
     "lseek64",
     "getsockname",
     "getpeername",
+    "fadvise64",
+    "fadvise64_64",
 }
 
 _FD_RE = re.compile(r"^\s*(\d+)")
@@ -209,6 +218,8 @@ def classify(syscall: str, args: str) -> str:
         return "exec"
     if syscall in _PROCESS_SYSCALLS:
         return "process"
+    if syscall in _FORK_SYSCALLS:
+        return "fork"
     if syscall in _PERMS_SYSCALLS:
         return "perms"
     if syscall in _FS_WRITE_SYSCALLS:

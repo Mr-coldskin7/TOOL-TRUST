@@ -107,7 +107,19 @@ def generate_requires(tool: str, inputs: list[str]) -> None:
     for a in manifest.get("claims", {}).get("allow", []):
         if isinstance(a, dict) and a.get("class") == "file-write":
             writable += a.get("paths") or []
-    requires = prereq.infer_requires_full(events, writable)
+    inferred = prereq.infer_requires_full(events, writable)
+
+    # 合并而非覆盖：env/cwd 无法从 strace 推断，保留手动声明；
+    # exec 手动词条(python3)在推断为空时也保留。
+    old = manifest.get("requires") or {}
+    requires = {
+        "env": old.get("env") or [],
+        "files": inferred.get("files") or [],
+        "exec": inferred.get("exec") or old.get("exec") or [],
+        "writable": inferred.get("writable") or [],
+    }
+    if old.get("cwd"):
+        requires["cwd"] = old["cwd"]
 
     manifest["requires"] = requires
     p = TOOLS_DIR / tool / "tool.yaml"

@@ -40,6 +40,20 @@ def test_perms_and_unknown():
     assert classify("totally_unknown_syscall", "x") == "other"
 
 
+def test_fork_split_from_process():
+    # 创建子进程(clone/fork)是良性 fork 类；杀/调试仍是危险 process
+    assert classify("clone", "CLONE_CHILD_CLEARTID") == "fork"
+    assert classify("fork", "") == "fork"
+    assert classify("kill", "1, SIGTERM") == "process"
+    assert classify("ptrace", "PTRACE_TRACEME") == "process"
+
+
+def test_other_noise_fixed():
+    assert classify("rt_sigreturn", "") == "sync"
+    assert classify("wait4", "-1, 0x0, 0, NULL") == "sync"
+    assert classify("fadvise64", "3, 0, 0, POSIX_FADV_WILLNEED") == "fd"
+
+
 def test_runtime_noise_classes():
     assert classify("mmap", "NULL, 8192, PROT_READ|PROT_WRITE") == "memory"
     assert classify("futex", "0x1234, FUTEX_WAIT") == "sync"

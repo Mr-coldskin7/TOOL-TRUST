@@ -1,0 +1,27 @@
+name: env-gate
+description: 依赖 TOOL_TRUST_DEMO_KEY 环境变量；缺失时 gate 硬拒不运行
+base_image: attest-base:latest
+build: 'true'
+command: sh env.sh
+inputs: []
+claims:
+  allow:
+  - exit
+  - fd
+  - file-read
+  - memory
+  - stdout
+  - sync
+  deny:
+  - exec
+  - file-write
+  - network
+  - other
+  - perms
+  - process
+  - stderr
+requires:
+  env:
+  - TOOL_TRUST_DEMO_KEY
+  exec:
+  - sh
