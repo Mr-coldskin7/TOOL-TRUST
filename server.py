@@ -24,7 +24,14 @@ def load_tools(mcp: FastMCP, tools_dir: pathlib.Path = pathlib.Path("tools")) ->
 
 
 if __name__ == "__main__":
+    import sys
+
     mcp = FastMCP("toolhub")
     n = load_tools(mcp)
-    print(f"loaded {n} tool(s)")
-    mcp.run(transport="http", port=8000)
+    print(f"loaded {n} tool(s)", file=sys.stderr)  # stdio 时 stdout 只走 MCP 协议
+
+    if "--stdio" in sys.argv:
+        mcp.run(transport="stdio")
+    else:
+        print(f"toolhub HTTP on http://localhost:8000/mcp")
+        mcp.run(transport="http", port=8000)
