@@ -65,3 +65,18 @@ def test_requires_inference_exact():
     assert len(req) == 4
     for name, r in req.items():
         assert r["exact"], f"requires 推断不精确: {name} → {r['inferred']}"
+
+
+def test_fuzz_stress_above_threshold():
+    """对抗 fuzz:固定 seed,独立 ground truth,规模 500。
+    阈值只看下界(recall ≥ 0.95 安全方向优先):若未来改动让 fuzz 变差,
+    先看 CI 再决定是修管道还是承认边界。"""
+    from bench.fuzz import run_fuzz
+    from bench.run_bench import run_case
+
+    results = run_fuzz(500, 20260831, run_case)
+    m = compute(results)
+    assert m.recall >= 0.95, f"fuzz recall={m.recall} 过低(恶意被放跑)"
+    assert m.precision >= 0.95, f"fuzz precision={m.precision} 过低(良性被误杀)"
+    assert m.accuracy >= 0.95, f"fuzz accuracy={m.accuracy} 过低"
+    assert m.ci_accuracy[0] >= 0.94, f"accuracy CI 下界过低: {m.ci_accuracy}"

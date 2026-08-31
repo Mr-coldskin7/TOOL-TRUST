@@ -8,8 +8,26 @@ precision = TP/(TP+FP)  定位准确率(判 fail 的里多少是真恶意)
 recall    = TP/(TP+FN)  检出率(恶意里多少被抓)
 f1        = 2PR/(P+R)
 accuracy  = (TP+TN)/N
+
+小样本的 1.000 没统计意义 —— 用 Wilson score interval(95%)把样本量
+读进数字里:22/22 全对的下界只有 ~0.85,数千样本全对下界 ~0.99。
 """
+import math
 from dataclasses import dataclass
+
+
+_Z95 = 1.96
+
+
+def wilson(k: int, n: int, z: float = _Z95) -> tuple[float, float]:
+    """Wilson score interval:对极端值(precision=1.0)不退化到 0,适合误报率场景。"""
+    if n == 0:
+        return (0.0, 1.0)
+    p = k / n
+    denom = 1 + z * z / n
+    center = (p + z * z / (2 * n)) / denom
+    half = z * math.sqrt((p * (1 - p) + z * z / (4 * n)) / n) / denom
+    return (max(0.0, center - half), min(1.0, center + half))
 
 
 @dataclass
@@ -31,6 +49,10 @@ class Metrics:
     recall: float
     f1: float
     accuracy: float
+    # 95% Wilson CI: (lower, upper),k = 正确数,n = 分母
+    ci_precision: tuple[float, float]
+    ci_recall: tuple[float, float]
+    ci_accuracy: tuple[float, float]
     cases: list[CaseResult]   # 全量逐 case 结果(按 y/n/y/n 分组)
     wrong: list[CaseResult]   # 判定与标签不一致的 case
 
@@ -53,6 +75,9 @@ def compute(results: list[CaseResult]) -> Metrics:
     return Metrics(
         tp=tp, tn=tn, fp=fp, fn=fn,
         precision=precision, recall=recall, f1=f1, accuracy=accuracy,
+        ci_precision=wilson(tp, tp + fp),
+        ci_recall=wilson(tp, tp + fn),
+        ci_accuracy=wilson(tp + tn, len(results)),
         cases=results, wrong=wrong,
     )
 
@@ -80,6 +105,11 @@ def render(results: list[CaseResult], requires: dict | None = None) -> str:
     lines.append("  召回率 recall     %.3f" % m.recall)
     lines.append("  F1               %.3f" % m.f1)
     lines.append("  准确率 accuracy   %.3f" % m.accuracy)
+    lines.append("  95% CI (Wilson):")
+    lines.append("    precision  [%.3f, %.3f]" % m.ci_precision)
+    lines.append("    recall     [%.3f, %.3f]" % m.ci_recall)
+    lines.append("    accuracy   [%.3f, %.3f]" % m.ci_accuracy)
+    lines.append("  ※ 小样本全对=1.000 不代表系统安全:置信区间下界才是可宣称的底线")
     lines.append("┌─ 逐 case ───────────────────────────────────────────")
     for r in m.cases:
         ok = (r.label == "malicious") == (r.verdict == "fail")
@@ -99,15 +129,27 @@ def render(results: list[CaseResult], requires: dict | None = None) -> str:
             lines.append(
                 f"  {'✓' if r['exact'] else '✗'} {name:<20} files={r['files_ok']} exec={r['exec_ok']} exact={r['exact']}"
             )
+    lines.append("┌─ 已知边界 (面试/评审时须主动声明) ──────────────────")
+    lines.append("  1. claims 是行为采样画像,不是能力上界:conditional-evil 证明过")
+    lines.append("  2. file-read 无路径白名单(读 /tmp 与读 /etc/shadow 同权)")
+    lines.append("  3. 网络豁免偏宽:DNS(53)/127.x 全部放行,hosts 白名单才是主防线")
+    lines.append("  4. bench 测对账引擎的判定精度,不测 Docker 隔离/运行时 gate 的 subprocess")
+    lines.append("  5. 合成语料 ≠ 真实 strace:真实轨迹回放(dogfood)是后续工作")
     return "\n".join(lines)
 
 
 def to_dict(m: Metrics) -> dict:
     return {
         "metrics": {
+            "n_cases": len(m.cases),
             "tp": m.tp, "tn": m.tn, "fp": m.fp, "fn": m.fn,
             "precision": m.precision, "recall": m.recall,
             "f1": m.f1, "accuracy": m.accuracy,
+            "ci": {
+                "precision": list(m.ci_precision),
+                "recall": list(m.ci_recall),
+                "accuracy": list(m.ci_accuracy),
+            },
         },
         "cases": [
             {

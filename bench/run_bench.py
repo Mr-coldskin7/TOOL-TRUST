@@ -14,7 +14,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from attest import parse, prereq, reconcile, report, rules
-from bench import corpus
+from bench import corpus, fuzz
 from bench.metrics import CaseResult, compute, render, to_dict
 from observe import _drop_launch_execve, annotate
 
@@ -60,6 +60,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(prog="bench")
     ap.add_argument("--json", action="store_true", help="输出 JSON")
     ap.add_argument("--case", help="只看单个 case(如 dotdot-escape)")
+    ap.add_argument("--fuzz", metavar="N", type=int, default=0,
+                    help="额外跑 N 个对抗随机 case(可复现,seed 用 --seed)")
+    ap.add_argument("--seed", type=int, default=20260831, help="fuzz 随机种子(默认固定)")
     args = ap.parse_args()
 
     if args.case:
@@ -69,6 +72,8 @@ def main() -> None:
         return
 
     results = [run_case(c) for c in corpus.CASES]
+    if args.fuzz:
+        results += fuzz.run_fuzz(args.fuzz, args.seed, run_case)
     m = compute(results)
     requires = run_requires_cases()
     if args.json:
@@ -76,8 +81,11 @@ def main() -> None:
         blob["requires"] = requires
         blob["meta"] = {
             "n_cases": len(results),
+            "n_handwritten": len(corpus.CASES),
+            "n_fuzz": args.fuzz,
             "n_benign": len([r for r in results if r.label == "benign"]),
             "n_malicious": len([r for r in results if r.label == "malicious"]),
+            "fuzz_seed": args.seed,
         }
         print(json.dumps(blob, ensure_ascii=False, indent=2))
     else:

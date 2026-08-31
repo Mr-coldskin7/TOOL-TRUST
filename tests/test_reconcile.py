@@ -102,12 +102,19 @@ def test_filename_prefix_not_confused_with_dir():
 
 
 def test_path_traversal_via_dotdot_is_blocked():
-    # 声称只写 /tmp/，实际用 .. 逃逸到 /etc -> 必须被拒（真实安全漏洞样例）
+    # 声称只写 /tmp/,实际用 .. 逃逸到 /etc -> 必须被拒(真实安全漏洞样例)
     decl = [{"class": "file-write", "mode": "create", "paths": ["/tmp/"]}]
     ev = {"class": "file-write", "syscall": "openat", "path": "/tmp/../etc/cron.d/x", "mode": "create"}
     v = reconcile([ev], {"allow": decl, "deny": []})
     assert len(v) == 1
     assert v[0]["reason"] == "out-of-scope"
+
+
+def test_root_whitelist_matches_everything():
+    # 声明 / 是唯一前缀时,任意绝对路径都在范围内(fuzz 暴露的 // 边界缺陷)
+    decl = [{"class": "file-write", "mode": "create", "paths": ["/"]}]
+    ev = {"class": "file-write", "syscall": "openat", "path": "/etc/x", "mode": "create"}
+    assert reconcile([ev], {"allow": decl, "deny": []}) == []
 
 
 # ---- network.hosts：白名单对账 ----

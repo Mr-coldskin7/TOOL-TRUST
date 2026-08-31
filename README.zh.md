@@ -185,11 +185,16 @@ uv run pytest -q
 管道本质是一个确定性分类器,所以用数字卡它。`bench/` 用一批手写合成 strace 日志(每条带 ground-truth 的良性/恶意标签),走与 `observe.py` 完全相同的代码路径,输出混淆矩阵 + 精确率/召回率/F1/准确率:
 
 ```bash
-uv run python bench/run_bench.py              # 表格
-uv run python bench/run_bench.py --json      # 机器可读
+uv run python bench/run_bench.py                # 教学 corpus 22 case
+uv run python bench/run_bench.py --fuzz 500     # + 500 个对抗随机 case
+uv run python bench/run_bench.py --json         # 机器可读(含 CI)
 ```
 
-当前基线:**22/22 全命中,precision=recall=F1=accuracy=1.000**。bench 有真牙齿——构建过程中暴露并修复了一个真实误报:`dup2(1,3)` 后 `write(3)` 被误判成写文件,冤枉了只声明 stdout 的良性工具。语料覆盖路径穿越(`/tmp/../etc/x`)、模式越权(声明 create 却 O_TRUNC)、未声明网络 host、读文件外传等。`tests/test_bench.py` 把指标变成回归门槛(每个 case 必须与 ground truth 一致;指标 ≥ 0.95)。
+当前基线:**522 case,precision=recall=F1=accuracy=1.000**(22 个手写教学 case + 500 个对抗随机 case)。样本量通过 95% Wilson 置信区间读进数字:accuracy CI `[0.993, 1.0]`,precision/recall CI `[0.987, 1.0]`——所以头号数字从来不是一个裸 `1.000`。
+
+为什么 fuzz 语料不是自证预言:`bench/fuzz.py` 从**意图模型**生成随机 case——claims 来自「声明侧」,strace 文本来自「行为侧」,ground-truth 标签来自意图级对比,与事件级对账管道**零共享代码**。构建过程中它抓出了两个手写 case 漏掉的真缺陷(根路径白名单边界 bug、fd-class 相关逻辑错误),都已修并加了回归测试。
+
+bench 只测**对账引擎本身**——不测 Docker 隔离、不测运行时 gate 的 subprocess 内部、不测工具源码恶意性(一次观察只是采样,`conditional-evil` 证明了这缺口)。这些边界在每次报告的末尾随指标一起打印。
 
 不经过 MCP 直接跑工具：
 

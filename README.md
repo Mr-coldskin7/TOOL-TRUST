@@ -185,11 +185,16 @@ uv run pytest -q
 The pipeline is a deterministic classifier, so we hold it to a quantitative bar. `bench/` runs a hand-built corpus of synthetic `strace` logs (each with a ground-truth `benign`/`malicious` label) through the **same code path** as `observe.py`, then reports a confusion matrix plus precision/recall/F1/accuracy:
 
 ```bash
-uv run python bench/run_bench.py              # table
-uv run python bench/run_bench.py --json      # machine-readable
+uv run python bench/run_bench.py                # corpus 22 case
+uv run python bench/run_bench.py --fuzz 500     # + 500 adversarial random cases
+uv run python bench/run_bench.py --json         # machine-readable (CI included)
 ```
 
-Current baseline: **22/22 cases, precision=recall=F1=accuracy=1.000**. The bench has real teeth — building it surfaced and fixed a genuine false-positive: `dup2(1,3)` followed by `write(3)` was misclassified as a file write and flagged honest stdout tools. Corpus cases also cover path traversal (`/tmp/../etc/x`), mode escalation (declare `create`, use `O_TRUNC`), undeclared network hosts, and file-exfil-style flows. `tests/test_bench.py` turns the metrics into a regression gate (every case must match ground truth; metrics ≥ 0.95).
+Current baseline: **522 cases, precision=recall=F1=accuracy=1.000** (22 handwritten + 500 adversarially fuzzed). Sample size is read into the numbers via a 95% Wilson confidence interval: accuracy CI `[0.993, 1.0]`, precision/recall CI `[0.987, 1.0]` — so the headline number is never a bare `1.000`.
+
+Why the fuzz corpus is not a self-fulfilling prophecy: `bench/fuzz.py` generates random cases from an **intent model** — claims derive from the *declared* side, strace text from the *behavior* side, and the ground-truth label from an intent-level comparison that shares no code with the event-level reconciliation pipeline. Building it surfaced two real engine defects that the 22 hand cases missed (a root-path whitelist boundary bug and an fd-class correlation error in the generator), which were fixed with regression tests.
+
+The bench measures the **reconciliation engine only** — not Docker isolation, not the subprocess-launch internals of the runtime gate, and not tool-source malice (a single observed run is a sample, `conditional-evil` proves the gap). These boundaries are printed in every report alongside the metrics.
 
 Run a tool directly without MCP:
 

@@ -37,7 +37,9 @@ def _path_in_paths(path: str, paths: list[str]) -> bool:
     p = posixpath.normpath(path)
     for pref in paths:
         base = posixpath.normpath(pref)
-        if p == base or p.startswith(base + "/"):
+        # 根 / 是边界特例: base + "/" 会变成 "//",永远匹配不上
+        prefix = base.rstrip("/") + "/" if base != "/" else "/"
+        if p == base or p.startswith(prefix):
             return True
     return False
 
