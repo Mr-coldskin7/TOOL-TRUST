@@ -165,6 +165,7 @@ TOOL-TRUST/
 │   ├── env_gate/
 │   ├── cpp-test/
 │   └── conditional-evil/   # boundary fixture, not registered
+├── bench/               # synthetic corpus + metrics (no Docker needed)
 ├── tests/               # pytest suite
 └── .claude/skills/register-tool/  # skill for adding tools
 ```
@@ -178,6 +179,17 @@ Run tests:
 ```bash
 uv run pytest -q
 ```
+
+### Quantitative metrics
+
+The pipeline is a deterministic classifier, so we hold it to a quantitative bar. `bench/` runs a hand-built corpus of synthetic `strace` logs (each with a ground-truth `benign`/`malicious` label) through the **same code path** as `observe.py`, then reports a confusion matrix plus precision/recall/F1/accuracy:
+
+```bash
+uv run python bench/run_bench.py              # table
+uv run python bench/run_bench.py --json      # machine-readable
+```
+
+Current baseline: **22/22 cases, precision=recall=F1=accuracy=1.000**. The bench has real teeth — building it surfaced and fixed a genuine false-positive: `dup2(1,3)` followed by `write(3)` was misclassified as a file write and flagged honest stdout tools. Corpus cases also cover path traversal (`/tmp/../etc/x`), mode escalation (declare `create`, use `O_TRUNC`), undeclared network hosts, and file-exfil-style flows. `tests/test_bench.py` turns the metrics into a regression gate (every case must match ground truth; metrics ≥ 0.95).
 
 Run a tool directly without MCP:
 

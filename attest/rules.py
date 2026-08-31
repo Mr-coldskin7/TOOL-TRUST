@@ -253,7 +253,8 @@ def route_fds(events: list[dict]) -> None:
     """
     tables: dict[int, dict[int, str]] = {}
     for e in events:
-        ctx = tables.setdefault(e["pid"], {})
+        # fd 1/2 是进程标准流,dup/dup2 到别的 fd 后写入仍属 stdout/stderr
+        ctx = tables.setdefault(e["pid"], {1: "stdout", 2: "stderr"})
         sc, args, ret = e["syscall"], e.get("args") or "", e.get("ret")
         fd = _ret_fd(ret)
         if sc in _FD_RETURN and fd is not None:
@@ -276,6 +277,8 @@ def route_fds(events: list[dict]) -> None:
                     e["class"] = "network"
                 elif k == "file":
                     e["class"] = "file-write" if sc in {"write", "writev", "pwrite", "pwritev", "sendfile"} else "file-read"
+                elif k in ("stdout", "stderr"):
+                    e["class"] = k  # dup2(1, 3) 后 write(3) 仍是 stdout,不误判 file-write
 
 
 def _open_flags_write(args: str) -> bool:

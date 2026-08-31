@@ -132,6 +132,27 @@ def test_dup_copies_fd_kind():
     assert events[2]["class"] == "network"
 
 
+def test_dup2_stdout_stays_stdout():
+    # bench 暴露的真实 FP:dup2(1, 3) 后 write(3) 若被当 file-write,
+    # 会在仅声明 stdout 的工具上误报(not-claimed)。fd 1/2 是标准流。
+    events = [
+        _re(1, "dup2", "1, 3", "3"),
+        _re(1, "write", '3, "copied stdout\n", 15', "15"),
+    ]
+    route_fds(events)
+    assert events[1]["class"] == "stdout"
+
+
+def test_dup_unknown_fd_stays_file_write():
+    # dup 自未登记 fd 仍保持 classify 默认(file-write 保守)
+    events = [
+        _re(1, "dup", "7, 3", "3"),
+        _re(1, "write", '3, "x", 1', "1"),
+    ]
+    route_fds(events)
+    assert events[1]["class"] == "file-write"
+
+
 def test_close_removes_fd_kind():
     events = [
         _re(1, "socket", "AF_INET, SOCK_STREAM", "3"),
