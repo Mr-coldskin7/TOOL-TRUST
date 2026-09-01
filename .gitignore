@@ -35,3 +35,6 @@ runtime/
 
 # 个人面试备考笔记（不进 git）
 /docs/resume-notes.md
+
+# 课程安全笔记（含项目映射分析，不进 git）
+/docs/appsec-ai-agent-notes.md
