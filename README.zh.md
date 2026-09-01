@@ -212,6 +212,8 @@ cat tools/<name>/report.json | jq
 
 ## 路线图
 
+详细且持续更新的工作清单:[TODO.md](TODO.md)。
+
 - [x] 体检管道：Docker 沙箱 + strace → JSON report
 - [x] 结构化 claims：`file-write` 支持 `mode` + `paths` 白名单
 - [x] `requires` 起飞前检查：自动推断 + 硬校验

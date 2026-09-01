@@ -212,6 +212,8 @@ cat tools/<name>/report.json | jq
 
 ## Roadmap
 
+Detailed, regularly-updated work list: **[TODO.md](TODO.md)**.
+
 - [x] Attestation pipeline: Docker sandbox + strace → JSON report
 - [x] Structured claims: `file-write` with `mode` + `paths` whitelist
 - [x] `requires` pre-flight: auto-inference + hard check
