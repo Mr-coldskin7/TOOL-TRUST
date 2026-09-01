@@ -222,6 +222,9 @@ cat tools/<name>/report.json | jq
 - [x] Boundary fixtures (`evil-write`, `conditional-evil`) to stress-test gate
 - [ ] Full manifest-driven registration: add a tool by only editing `tool.yaml`
 - [ ] `toolhub` health scan: detect stale/failed attestation reports
+- [ ] **Tool provenance (supply-chain trust)**: `source`/`version`/`hash` in manifest; version change → attestation invalidates (SCA-style); gate refuses tampered tools
+- [ ] **First-connect human review** for unknown-source tools (browser-unknown-CA model) — Tool Misuse mitigation
+- [ ] **Caller identity in gate**: record session/agent making the call — Identity Spoofing mitigation
 - [ ] Multi-language runtime support (Node, Go) in base image
 - [ ] Telemetry dashboard from `cache_tool` logs
 
