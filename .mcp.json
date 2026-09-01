@@ -1,9 +1,3 @@
 {
-  "mcpServers": {
-    "toolhub": {
-      "command": "/Users/lishanyi/Documents/projects/tool-trust/toolhub",
-      "lifecycle": "lazy",
-      "directTools": true
-    }
-  }
+  "mcpServers": {}
 }
