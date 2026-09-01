@@ -38,3 +38,7 @@ runtime/
 
 # 课程安全笔记（含项目映射分析，不进 git）
 /docs/appsec-ai-agent-notes.md
+
+# 个人提交总结 & Resume 同步工具（不进 git，本地保留）
+/docs/CHANGELOG.md
+/scripts/sync_resume_facts.py
