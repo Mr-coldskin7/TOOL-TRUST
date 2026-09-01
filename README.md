@@ -228,6 +228,39 @@ cat tools/<name>/report.json | jq
 - [ ] Multi-language runtime support (Node, Go) in base image
 - [ ] Telemetry dashboard from `cache_tool` logs
 
+## Direction (why the roadmap looks like this)
+
+tool-trust exists because AI agents trust too much. Modern attacks on agents
+(Prompt Injection, Tool Misuse, Intent Breaking, Identity Spoofing, Code
+Attacks) all exploit some **unconditional trust** — the model trusts text,
+tools, plans, identities, and code execution. We take exactly one of those
+points (tool behavior) out of the cloud and replace trust with **verifiable
+fact**: a Docker sandbox observes what a tool actually does, and a
+deterministic reconciliation engine compares it against what the tool
+declared.
+
+That framing decides the next three directions:
+
+1. **Tool provenance (SCA-style supply-chain trust)** — a manifest that
+   carries `source` / `version` / `hash`. A version bump invalidates the
+   attestation; a tampered `tool.py` is refused at the gate. This closes the
+   one real blind spot in the current threat model: a tool that *honestly*
+   declares malicious behavior still passes attestation today (behavior
+   attestation is drift-detection, not malware detection).
+2. **First-connect human review for unknown sources** — unknown-origin tools
+   need a one-time human approval before first use, mirroring how browsers
+   treat self-signed CAs. This is the engineering answer to Tool Misuse
+   ("agent gets tricked into adding a malicious MCP server").
+3. **Caller identity in the gate** — record which session/agent invokes each
+   tool, so a compromised calling agent cannot impersonate a legitimate one
+   (Identity Spoofing).
+
+Further out: **executable-plan accountability**. Claim-vs-reality
+verification already proves a *tool* does what it says; the same idea
+applied to an agent's *execution plan* (declare steps → verify steps
+actually run) is the candidate answer to Intent Breaking — the one vector
+with no clean engineering solution today.
+
 ---
 
 ## License

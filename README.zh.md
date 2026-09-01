@@ -228,6 +228,29 @@ cat tools/<name>/report.json | jq
 - [ ] 基础镜像支持更多语言运行时(Node、Go)
 - [ ] 基于 `cache_tool` 日志的 telemetry 看板
 
+## 方向(为什么 roadmap 长这样)
+
+tool-trust 的存在理由:AI Agent 信任得太多。现代针对 Agent 的攻击(Prompt
+Injection / Tool Misuse / Intent Breaking / Identity Spoofing / Code Attacks)
+都在利用某个**「无条件信任」**——模型信任文本、信任工具、信任计划、信任身份、信任代码执行。
+我们只把其中一个点(工具行为)从信任云里抠出来,换成**可验证事实**:Docker 沙箱观察工具
+实际做了什么,确定性对账引擎把它与声明对比。
+
+这个框架决定接下来三个方向:
+
+1. **工具 provenance(SCA 式供应链信任)** — manifest 携带 `source` / `version` /
+   `hash`。版本一变 → attestation 失效;`tool.py` 被篡改 → gate 拒绝。这填补当前威胁
+   模型的唯一真实盲区:**诚实声明恶意行为的工具现在照样过体检**(行为证明是防漂移,不是
+   杀毒)。
+2. **未知来源首次接入人工审查** — 像浏览器对待自签名 CA 一样,未知来源工具首次使用前需要
+   一次性人工批准。这是对 Tool Misuse(「Agent 被骗着加了恶意 MCP server」)的工程答案。
+3. **gate 记录调用者身份** — 记录哪个 session/agent 调用了每个工具,被攻破的调用 Agent 无法
+   冒充合法身份(Identity Spoofing)。
+
+更远期:**可执行计划问责**。声明 vs 实际 的验证已经能证明一个*工具*说到做到;同一思路
+套到 Agent 的*执行计划*上(声明步骤 → 验证步骤真的执行),就是 Intent Breaking 的候选方案
+——今天唯一没有干净工程解的向量。
+
 ---
 
 ## License
