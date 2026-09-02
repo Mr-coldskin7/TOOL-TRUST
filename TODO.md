@@ -24,10 +24,10 @@
 
 ## Mid term (supply-chain trust layer · attack-vector mapped)
 
-- [ ] **CI/CD pipeline**: GitHub Actions on every push/PR — run `uv run pytest` +
-      `bench --json --fuzz 500` (metrics regression gate, thresholds from
-      `tests/test_bench.py`); optional Docker observe smoke test (marked slow);
-      commit summaries appended locally to `docs/CHANGELOG.md` (gitignored)
+- [x] **CI/CD pipeline**: GitHub Actions on every push/PR — pytest + usability
+      (server/gate smoke) + Docker observe e2e + 522-case bench metrics gate
+      (≥0.95, artifact). CI done 2026-09-02; CD (plugin-store distribution) parked
+      until provenance + versioning mature
 
 - [ ] **First-connect human review** for unknown-source tools (browser / unknown-CA
       model) — Tool Misuse mitigation
