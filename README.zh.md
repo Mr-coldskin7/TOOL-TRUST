@@ -225,7 +225,7 @@ cat tools/<name>/report.json | jq
 - [x] 边界夹具（`evil-write`、`conditional-evil`）持续压测 gate
 - [ ] 完全 manifest 驱动:新增工具只需改 `tool.yaml`
 - [ ] `toolhub` 健康扫描:检测过期或失败的 attestation report
-- [ ] **工具 provenance(供应链信任)**:manifest 加 `source`/`version`/`hash`;版本一变 → attestation 失效(SCA 式);gate 拒绝被篡改的工具
+- [x] **工具 provenance(供应链信任)**: manifest 加 `source`/`version`/`hash`;源代码被篡改 → gate 拒绝;版本一变 → attestation 失效(SCA 式)
 - [ ] **未知来源工具首次接入人工审查**(参照浏览器未知 CA 模型)— 缓解 Tool Misuse
 - [ ] **gate 记录调用者身份**:session/agent 上下文 — 缓解 Identity Spoofing
 - [ ] 基础镜像支持更多语言运行时(Node、Go)

@@ -9,7 +9,7 @@
 - [x] Promote `toolhub` to global pi MCP registration (visible from any project, 4 servers)
 - [x] Attestation pipeline / three-level claims / `requires` / gate / server-side filter
 - [x] bench: 22 handwritten cases + 500 adversarial fuzz + Wilson CI (accuracy 1.000, CI ≥ 0.987)
-- [ ] **Tool provenance, minimal implementation** (SCA-style supply-chain trust;
+- [x] **Tool provenance, minimal implementation** (SCA-style supply-chain trust;
       closes the "honestly-malicious tool" blind spot):
   - add `source` / `version` / `hash` to `tool.yaml`
   - version bump → cached attestation invalidates, re-observe required
