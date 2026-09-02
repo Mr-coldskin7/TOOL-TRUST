@@ -15,7 +15,7 @@ Innocuous classes (stdout/exit/file-read/...) only need level 1.
 import posixpath
 import socket
 
-from attest.rules import MODE_ALLOWS
+from attest.rules import MODE_ALLOWS, SEVERITY
 
 
 def _normalize_allow(allow: list) -> list[dict]:
@@ -64,7 +64,7 @@ def reconcile(
       resolver: optional host->IP resolver (deterministic for tests).
 
     Returns:
-      List of violation dicts with class/reason/syscalls/evidence/detail.
+      List of violation dicts with class/reason/severity/syscalls/evidence/detail.
     """
     allow = _normalize_allow(claims.get("allow", []))
     deny = set(claims.get("deny", []))
@@ -149,9 +149,8 @@ def _check_file_write(
         allowed_modes = set()
         for d in in_scope:
             m = d.get("mode")
-            allowed_modes |= (
-                MODE_ALLOWS[m] if m and m in MODE_ALLOWS else MODE_ALLOWS["overwrite"]
-            )
+            # Missing mode defaults to the strictest intent (create), not overwrite.
+            allowed_modes |= MODE_ALLOWS[m] if m and m in MODE_ALLOWS else MODE_ALLOWS["create"]
         if mode is not None and mode not in allowed_modes:
             _add_one(
                 violations,
@@ -161,12 +160,18 @@ def _check_file_write(
             )
 
 
+def _severity(class_: str) -> str:
+    """Severity for a behavior class (defaults to medium for unknowns)."""
+    return SEVERITY.get(class_, "medium")
+
+
 def _add(violations: list[dict], c: str, reason: str, evs: list[dict]) -> None:
     """Record one aggregated violation for a whole event class."""
     violations.append(
         {
             "class": c,
             "reason": reason,
+            "severity": _severity(c),
             "syscalls": sorted({e["syscall"] for e in evs}),
             "evidence": evs[0].get("args", "") if evs else "",
         }
@@ -175,10 +180,12 @@ def _add(violations: list[dict], c: str, reason: str, evs: list[dict]) -> None:
 
 def _add_one(violations: list[dict], ev: dict, reason: str, detail: str) -> None:
     """Record one violation for a single event, with detail."""
+    class_ = ev.get("class", "file-write")
     violations.append(
         {
-            "class": ev.get("class", "file-write"),
+            "class": class_,
             "reason": reason,
+            "severity": _severity(class_),
             "syscalls": [ev["syscall"]],
             "evidence": ev.get("args", ""),
             "detail": detail,

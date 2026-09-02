@@ -1,4 +1,5 @@
 from attest.reconcile import reconcile
+from attest.rules import SEVERITY
 
 CLAIMS = {
     "allow": ["file-read", "stdout", "stderr", "exit"],
@@ -151,3 +152,35 @@ def test_network_ip_less_event_skipped():
     claims = {"allow": [{"class": "network", "hosts": ["yahoo.com"]}], "deny": []}
     ev = {"class": "network", "syscall": "sendmsg", "args": "x"}
     assert reconcile([ev], claims, resolver=_fake_resolver) == []
+
+
+# ---- 默认 mode 策略 + violation severity ----
+
+def test_fw_missing_mode_defaults_to_create():
+    # 声明 file-write 但未写 mode 时，应默认最严格(create)，而非 overwrite
+    decl = [{"class": "file-write", "paths": ["/tmp/"]}]
+    ev = {"class": "file-write", "syscall": "openat", "path": "/tmp/x", "mode": "overwrite"}
+    v = reconcile([ev], {"allow": decl, "deny": []})
+    assert len(v) == 1
+    assert v[0]["reason"] == "mode-exceeded"
+
+
+def test_fw_missing_mode_allows_create():
+    decl = [{"class": "file-write", "paths": ["/tmp/"]}]
+    ev = {"class": "file-write", "syscall": "openat", "path": "/tmp/x", "mode": "create"}
+    assert reconcile([ev], {"allow": decl, "deny": []}) == []
+
+
+def test_violation_includes_severity():
+    events = [ev("network", "connect", "3, 10.0.0.1:443")]
+    violations = reconcile(events, CLAIMS)
+    assert len(violations) == 1
+    assert violations[0]["severity"] == SEVERITY["network"]
+
+
+def test_violation_file_write_severity():
+    decl = [{"class": "file-write", "mode": "create", "paths": ["/tmp/"]}]
+    ev = {"class": "file-write", "syscall": "openat", "path": "/etc/x", "mode": "overwrite"}
+    v = reconcile([ev], {"allow": decl, "deny": []})
+    assert len(v) == 1
+    assert v[0]["severity"] == SEVERITY["file-write"]
