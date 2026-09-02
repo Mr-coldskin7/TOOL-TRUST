@@ -6,6 +6,25 @@
 
 ## Near term (0–2 weeks · high value)
 
+- [ ] **LIVE RECONCILIATION + CONTRACT FLOW (top priority — makes the project name true)**:
+      gate must check what THIS call actually did, not just the cached report.
+      - **Contract flow (breaks the circular-trust loop)**: intent → discover →
+        confirm → enforce — observation may only SUGGEST boundaries, the
+        operator (or their agent) has the authority to approve. `--generate-claims`
+        is downgraded to `observed-suggested` candidates; only `operator-approved`
+        claims compile into enforce policies. (2026-09-02 decision)
+      - backend: mature record/complain observer (seatbelt/sandbox-exec on macOS,
+        srt violation-store when it ships a binary) wrapping the real process
+      - claims gain `origin` metadata: author-built | observed-suggested |
+        operator-approved; gate/profile compile only approved origins
+      - reuse attest/rules.py + reconcile.py (the bench-verified engine) for the
+        watch/audit path and double-source checks against sandbox verdicts
+      - claim granularity: allowlist down to hosts/paths/args (else "network
+        allowed" catches nothing)
+      - side effects: live traces feed telemetry/audit (absorbs caller-identity,
+        replay-real-traces, telemetry-dashboard TODO items)
+      - closes the conditional-evil hole AND the self-testimony loop
+
 - [x] Promote `toolhub` to global pi MCP registration (visible from any project, 4 servers)
 - [x] Attestation pipeline / three-level claims / `requires` / gate / server-side filter
 - [x] bench: 22 handwritten cases + 500 adversarial fuzz + Wilson CI (accuracy 1.000, CI ≥ 0.987)
