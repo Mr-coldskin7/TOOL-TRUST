@@ -42,3 +42,6 @@ runtime/
 # 个人提交总结 & Resume 同步工具（不进 git，本地保留）
 /docs/CHANGELOG.md
 /scripts/sync_resume_facts.py
+
+# 每次 observe 生成的报告（gate 缓存，不进 git）
+/tools/*/report.json

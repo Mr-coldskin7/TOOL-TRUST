@@ -10,7 +10,7 @@ import pathlib
 
 import yaml
 
-from attest import build, parse, prereq, reconcile, report, rules, run
+from attest import build, parse, prereq, provenance, reconcile, report, rules, run
 
 TOOLS_DIR = pathlib.Path("tools")
 
@@ -48,8 +48,17 @@ def observe(tool: str, inputs: list[str]) -> dict:
     annotate(events)
     violations = reconcile.reconcile(events, manifest["claims"])
     return report.build_report(
-        manifest["name"], inputs, manifest["claims"], events, violations
+        manifest["name"], inputs, manifest["claims"], events, violations,
+        provenance=provenance.snapshot(manifest),
     )
+
+
+def save_report(tool: str, r: dict) -> pathlib.Path:
+    """把体检报告落盘到 tools/<tool>/report.json —— gate 读这份缓存做决策。"""
+    p = TOOLS_DIR / tool / "report.json"
+    p.write_text(json.dumps(r, ensure_ascii=False, indent=2))
+    print(f"report written to {p}")
+    return p
 
 
 def generate_claims(tool: str, inputs: list[str]) -> None:
@@ -145,6 +154,8 @@ def main() -> None:
     ap.add_argument("--generate-claims", action="store_true")
     ap.add_argument("--generate-requires", action="store_true")
     ap.add_argument("--check-requires", action="store_true")
+    ap.add_argument("--save-report", action="store_true",
+                    help="把报告落盘到 tools/<tool>/report.json(gate 决策缓存)")
     args = ap.parse_args()
 
     if args.generate_claims:
@@ -158,6 +169,8 @@ def main() -> None:
         return
     r = observe(args.tool, args.inputs)
     print(json.dumps(r, ensure_ascii=False, indent=2))
+    if args.save_report:
+        save_report(args.tool, r)
 
 
 if __name__ == "__main__":

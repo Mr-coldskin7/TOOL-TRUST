@@ -16,7 +16,7 @@ import pathlib
 import shutil
 import subprocess
 
-from attest import prereq, telemetry
+from attest import prereq, provenance, telemetry
 
 
 def load_attestation_verdict(tool_dir: pathlib.Path) -> str | None:
@@ -32,26 +32,59 @@ def load_attestation_verdict(tool_dir: pathlib.Path) -> str | None:
     return v if v in ("pass", "fail") else None
 
 
+def load_report(tool_dir: pathlib.Path) -> dict | None:
+    """读整份缓存报告（无/坏返回 None）。闸 3 provenance 用读快照。"""
+    p = tool_dir / "report.json"
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _deny(manifest: dict, reason: str, extra: dict | None = None) -> dict:
+    d = {"decision": "deny", "reason": reason, "tool": manifest["name"]}
+    if extra:
+        d.update(extra)
+    telemetry.log_run({"event": "decide", **d})
+    return d
+
+
 def decide(manifest: dict, tool_dir: pathlib.Path) -> dict:
-    """决策闸：给"这个工具现在能不能被使用"下结论。纯逻辑，不运行工具。"""
+    """决策闸：给"这个工具现在能不能被使用"下结论。纯逻辑，不运行工具。
+
+    闸 1  attestation：缓存报告 verdict=fail → 拒绝
+    闸 2  requires   ：缺任一前置 → 拒绝(env-mismatch)，不运行省 token/算力
+    闸 3  provenance ：有身份证的工具必须证明「还是原来那个」——
+          源码哈希被改(tampered)/缓存报告无快照(stale)/版本漂移(stale-version) → 拒绝
+    """
     # 闸 1：attestation 判 fail → 拒绝
     verdict = load_attestation_verdict(tool_dir)
     if verdict == "fail":
-        d = {"decision": "deny", "reason": "attestation-fail", "tool": manifest["name"]}
-        telemetry.log_run({"event": "decide", **d})
-        return d
+        return _deny(manifest, "attestation-fail")
 
     # 闸 2：requires 硬拒 —— 缺任一前置 → 拒绝，省 token/算力
     check = prereq.hard_check(manifest.get("requires"), cwd=str(tool_dir))
     if check["verdict"] != "pass":
-        d = {
-            "decision": "deny",
-            "reason": "env-mismatch",
-            "tool": manifest["name"],
-            **check,
-        }
-        telemetry.log_run({"event": "decide", **d})
-        return d
+        return _deny(manifest, "env-mismatch", {**check})
+
+    # 闸 3：provenance —— 有身份证的工具必须证明「还是原来那个」
+    prov = manifest.get("provenance")
+    if prov:
+        declared = prov.get("hash") or ""
+        if declared:
+            cur = provenance.compute_tool_hash(tool_dir)
+            if cur != declared:
+                return _deny(manifest, "tampered", {
+                    "detail": f"source hash {cur[:12]} != declared {declared[:12]}"})
+        rp = (load_report(tool_dir) or {}).get("provenance")
+        if not rp:
+            return _deny(manifest, "stale", {
+                "detail": "cached attestation has no provenance snapshot; re-observe (--save-report)"})
+        if prov.get("version") and rp.get("version") != prov.get("version"):
+            return _deny(manifest, "stale-version", {
+                "detail": f"cached attestation {rp.get('version')!r} != declared {prov.get('version')!r}"})
 
     d = {"decision": "allow", "reason": "ok", "tool": manifest["name"]}
     telemetry.log_run({"event": "decide", **d})
