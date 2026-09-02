@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    name: tests (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Sync deps (locked)
+        run: uv sync --frozen
+      - name: Unit & integration tests (no Docker)
+        run: uv run pytest -q -m "not slow"
+
+  usability:
+    name: usability (server + gate smoke)
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Sync deps (locked)
+        run: uv sync --frozen
+      - name: Smoke — server starts & gate allows/denies
+        run: uv run python scripts/ci_smoke.py --no-docker
+
+  observe:
+    name: observe smoke (Docker attestation e2e)
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Sync deps (locked)
+        run: uv sync --frozen
+      - name: Observe cache-tool → expect verdict=pass
+        run: uv run python scripts/ci_smoke.py --observe-only
+        timeout-minutes: 20
+
+  bench:
+    name: bench gate (metrics regression)
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Sync deps (locked)
+        run: uv sync --frozen
+      - name: Bench gate — precision/recall/accuracy ≥ 0.95
+        run: uv run python scripts/ci_bench_gate.py
+      - name: Upload bench report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-report
+          path: /tmp/bench-report.json
