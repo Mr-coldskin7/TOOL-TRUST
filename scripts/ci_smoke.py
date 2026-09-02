@@ -71,9 +71,13 @@ def check_observe() -> None:
     except Exception:
         print("[observe] ⏭ docker 不可用,跳过")
         return
+    import json as _json
     from observe import observe
     r = observe("cache-tool", ["ci-smoke"])
-    assert r["verdict"] == "pass", f"observe verdict={r['verdict']}, violations={r['violations'][:2]}"
+    if r["verdict"] != "pass":
+        print("[observe] ✗ cache-tool fail; violations:")
+        print(_json.dumps(r.get("violations", []), ensure_ascii=False, indent=2))
+        raise AssertionError(r["verdict"])
     print(f"[observe] ✓ cache-tool verdict=pass ({r['observed']['syscall_count']} syscalls)")
 
 

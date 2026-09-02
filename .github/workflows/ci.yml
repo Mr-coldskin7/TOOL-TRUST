@@ -47,6 +47,17 @@ jobs:
       - name: Observe cache-tool → expect verdict=pass
         run: uv run python scripts/ci_smoke.py --observe-only
         timeout-minutes: 20
+      - name: Diagnose cpp-test on this arch (non-blocking)
+        continue-on-error: true
+        run: |
+          uv run python - <<'EOF'
+          import json
+          from observe import observe
+          r = observe("cpp-test", ["ci-diagnose"])
+          print("verdict:", r["verdict"])
+          print("classes:", r["observed"]["classes"])
+          print("violations:", json.dumps(r["violations"], ensure_ascii=False, indent=2))
+          EOF
 
   bench:
     name: bench gate (metrics regression)

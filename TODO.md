@@ -24,6 +24,11 @@
 
 ## Mid term (supply-chain trust layer · attack-vector mapped)
 
+- [ ] **CI/CD pipeline**: GitHub Actions on every push/PR — run `uv run pytest` +
+      `bench --json --fuzz 500` (metrics regression gate, thresholds from
+      `tests/test_bench.py`); optional Docker observe smoke test (marked slow);
+      commit summaries appended locally to `docs/CHANGELOG.md` (gitignored)
+
 - [ ] **First-connect human review** for unknown-source tools (browser / unknown-CA
       model) — Tool Misuse mitigation
 - [ ] **semgrep SAST layer in register-tool onboarding**: `static_scan` section in
