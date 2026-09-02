@@ -15,11 +15,14 @@ claims:
   deny:
   - exec
   - file-write
+  - fork
   - network
   - other
   - perms
   - process
   - stderr
+  origin: operator-approved
+  approved_at: '2026-09-02T08:28:09+00:00'
 requires:
   env: []
   files:
