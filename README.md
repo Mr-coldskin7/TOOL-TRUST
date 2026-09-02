@@ -3,6 +3,7 @@
 **Attested MCP Tool Hub.** Turn everyday scripts into trustworthy, self-declaring MCP tools. Each tool ships with a machine-readable behavioral attestation report produced inside a Docker sandbox.
 
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](tests/)
+[![CI](https://github.com/Mr-coldskin7/TOOL-TRUST/actions/workflows/ci.yml/badge.svg)](https://github.com/Mr-coldskin7/TOOL-TRUST/actions/workflows/ci.yml)
 
 ---
 

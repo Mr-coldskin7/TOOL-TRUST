@@ -3,6 +3,7 @@
 **可验证的 MCP 工具中心（Attested MCP Tool Hub）**。把日常脚本变成带“行为体检报告”的 MCP 工具。每个工具都内置一份机器可读的 attestation report，由 Docker + strace 一次观察生成。
 
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](tests/)
+[![CI](https://github.com/Mr-coldskin7/TOOL-TRUST/actions/workflows/ci.yml/badge.svg)](https://github.com/Mr-coldskin7/TOOL-TRUST/actions/workflows/ci.yml)
 
 ---
 
