@@ -79,6 +79,17 @@ def test_tampered_source_is_denied(tool_dir):
     assert d["decision"] == "deny" and d["reason"] == "tampered"
 
 
+def test_upgrade_with_code_change_is_stale_not_tampered(tool_dir):
+    """作者改代码 + 升版本 = 正常升级 → 旧证明作废(stale-version),不是篡改。
+    这锁住用户发现过的语义缺陷:先比 hash 会误把升级当攻击。"""
+    _write_report(tool_dir, version="1.0")
+    (tool_dir / "run.sh").write_text("#!/bin/sh\necho hello v2\n")  # 源码也变了
+    m = _manifest(version="1.1", with_hash=False)
+    m["provenance"]["hash"] = "0" * 64  # 源码变了,声明 hash 当然是旧的/错的
+    d = decide(m, tool_dir)
+    assert d["reason"] == "stale-version", d
+
+
 def test_stale_without_snapshot_is_denied(tool_dir):
     _write_report(tool_dir, with_prov=False)  # 旧报告:无 provenance 快照
     m = _manifest(with_hash=False)

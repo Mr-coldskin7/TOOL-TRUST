@@ -73,18 +73,22 @@ def decide(manifest: dict, tool_dir: pathlib.Path) -> dict:
     prov = manifest.get("provenance")
     if prov:
         declared = prov.get("hash") or ""
-        if declared:
-            cur = provenance.compute_tool_hash(tool_dir)
-            if cur != declared:
-                return _deny(manifest, "tampered", {
-                    "detail": f"source hash {cur[:12]} != declared {declared[:12]}"})
+        cur = provenance.compute_tool_hash(tool_dir) if declared else None
         rp = (load_report(tool_dir) or {}).get("provenance")
         if not rp:
             return _deny(manifest, "stale", {
                 "detail": "cached attestation has no provenance snapshot; re-observe (--save-report)"})
-        if prov.get("version") and rp.get("version") != prov.get("version"):
+        declared_v, observed_v = prov.get("version"), rp.get("version")
+        hash_changed = bool(declared) and cur != declared
+        version_changed = bool(declared_v) and observed_v != declared_v
+        if hash_changed and not version_changed:
+            # 源码变了但版本没变 → 疑似被换内容,且没声称升级 → 篡改
+            return _deny(manifest, "tampered", {
+                "detail": f"source hash {cur[:12]} != declared {declared[:12]}, version unchanged"})
+        if version_changed:
+            # 版本变了(源码动没动都算)→ 可能是正常升级,旧证明作废 → 重检
             return _deny(manifest, "stale-version", {
-                "detail": f"cached attestation {rp.get('version')!r} != declared {prov.get('version')!r}"})
+                "detail": f"observed {observed_v!r} -> declared {declared_v!r}; re-observe (--save-report)"})
 
     d = {"decision": "allow", "reason": "ok", "tool": manifest["name"]}
     telemetry.log_run({"event": "decide", **d})
