@@ -4,26 +4,31 @@
 > attack-vector lessons (Prompt Injection / Tool Misuse / Intent Breaking /
 > Identity Spoofing / Code Attacks). Checkbox = done. **Bold** = newly planned.
 
-## Near term (0–2 weeks · high value)
+## Near term (0–2 weeks · high value) — ordered by dependency
 
-- [ ] **LIVE RECONCILIATION + CONTRACT FLOW (top priority — makes the project name true)**:
-      gate must check what THIS call actually did, not just the cached report.
-      - **Contract flow (breaks the circular-trust loop)**: intent → discover →
-        confirm → enforce — observation may only SUGGEST boundaries, the
-        operator (or their agent) has the authority to approve. `--generate-claims`
-        is downgraded to `observed-suggested` candidates; only `operator-approved`
-        claims compile into enforce policies. (2026-09-02 decision)
-      - backend: mature record/complain observer (seatbelt/sandbox-exec on macOS,
-        srt violation-store when it ships a binary) wrapping the real process
-      - claims gain `origin` metadata: author-built | observed-suggested |
-        operator-approved; gate/profile compile only approved origins
-      - reuse attest/rules.py + reconcile.py (the bench-verified engine) for the
-        watch/audit path and double-source checks against sandbox verdicts
-      - claim granularity: allowlist down to hosts/paths/args (else "network
-        allowed" catches nothing)
-      - side effects: live traces feed telemetry/audit (absorbs caller-identity,
-        replay-real-traces, telemetry-dashboard TODO items)
-      - closes the conditional-evil hole AND the self-testimony loop
+**Order rationale (2026-09-02):** contract governance BEFORE enforcement —
+without operator approval, compiling tool self-testimony into a sandbox
+policy amplifies the circular-trust we just killed; and sandbox feasibility
+must be proven before anything is built on it.
+
+- [ ] **Step 1 — CONTRACT GOVERNANCE (laws before locks)**:
+      - claims gain `origin`: author-built | observed-suggested | operator-approved
+      - `--generate-claims` downgraded: output is `observed-suggested` candidates,
+        NOT law; needs operator review/approval to become effective
+      - a confirm entry point (CLI) to review & approve candidate claims
+      - independent of sandbox; destroys the self-testimony loop
+- [ ] **Step 2 — SANDBOX FEASIBILITY SPIKE (≤1 day, parallel to Step 1)**:
+      seatbelt/sandbox-exec driven to "wraps a real tool call" depth on macOS
+      (long-running procs, network limiting, exit codes, log reading) —
+      prove the tech gamble before building on it (sandbox-exec is deprecated-
+      flagged by Apple; SIP/permissions risk)
+- [ ] **Step 3 — LIVE RECONCILIATION (enforcement layer)**:
+      build on Steps 1+2:
+      - `attest/profile.py`: operator-approved claims → seatbelt profile
+      - observer wraps real invocation; violations → deny + telemetry/audit
+      - reuse attest/rules.py + reconcile.py for watch/dual-check paths
+      - claim granularity: hosts/paths/args allowlists
+      - closes conditional-evil + self-testimony via enforcement
 
 - [x] Promote `toolhub` to global pi MCP registration (visible from any project, 4 servers)
 - [x] Attestation pipeline / three-level claims / `requires` / gate / server-side filter
