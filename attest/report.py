@@ -1,4 +1,4 @@
-"""JSON 报告：observed + violations + verdict。"""
+"""JSON report: observed + violations + verdict."""
 
 
 def build_report(
@@ -9,6 +9,19 @@ def build_report(
     violations: list[dict],
     provenance: dict | None = None,
 ) -> dict:
+    """Assemble the attestation report dict.
+
+    Args:
+      tool_name: tool name.
+      inputs:    argv passed to the tool during observation.
+      claims:    declared behavior manifest.
+      events:    classified strace events.
+      violations: reconciliation findings (empty = verdict pass).
+      provenance: optional provenance snapshot (hash/version/source/at).
+
+    Returns:
+      Report with tool/input/claims/observed/violations/verdict (+ provenance).
+    """
     classes: dict[str, int] = {}
     for e in events:
         classes[e["class"]] = classes.get(e["class"], 0) + 1

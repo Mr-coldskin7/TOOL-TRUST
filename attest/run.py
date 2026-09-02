@@ -1,20 +1,29 @@
-"""docker run：容器内 strace 全量跟踪工具运行。"""
+"""docker run: trace a tool with strace -f inside the container."""
 import os
 import pathlib
 import shutil
 import subprocess
 import tempfile
 
-# colima 文件共享不含 mac 私有目录（/var/folders），obs 目录必须落在项目根下
+# colima file sharing excludes mac private dirs (/var/folders); obs dir must
+# land inside the repo root
 OBS_ROOT = pathlib.Path(__file__).resolve().parent.parent / ".obs"
 
 
 def run_tool(manifest: dict, tool_dir: pathlib.Path, inputs: list[str]) -> str:
-    """运行工具并 strace，返回 strace 文本。
+    """Run the tool under strace in its container; return strace text as str.
 
-    - --cap-add=SYS_PTRACE：容器内 strace 需 ptrace 权限
-    - 不限定 -e trace=：默认拒绝对账依赖看到未声明 class
-    - strace 输出经挂载卷取回 host，不落工具目录
+    - --cap-add=SYS_PTRACE: strace inside the container needs ptrace permission
+    - no -e trace filter: default-deny reconciliation needs to see unclaimed classes
+    - strace output is collected via a mounted volume (never written into tool_dir)
+
+    Args:
+      manifest: tool.yaml contents.
+      tool_dir: tool directory (mounted read-only at /src).
+      inputs:   extra argv entries.
+
+    Returns:
+      Raw strace text (empty if unavailable).
     """
     OBS_ROOT.mkdir(exist_ok=True)
     obs_dir = pathlib.Path(tempfile.mkdtemp(dir=str(OBS_ROOT)))
@@ -32,7 +41,7 @@ def run_tool(manifest: dict, tool_dir: pathlib.Path, inputs: list[str]) -> str:
             "-v",
             f"{obs_dir.resolve()}:/obs",
         ]
-        # repository: true —— 工具要操作宿主仓库：把观察时的工作目录只读挂进 /repo
+        # repository: true — tool operates on the host repo; mount cwd read-only at /repo
         if manifest.get("repository"):
             repo = pathlib.Path(os.getcwd()).resolve()
             cmd += ["-v", f"{repo}:/repo:ro"]

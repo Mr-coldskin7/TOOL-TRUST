@@ -1,7 +1,12 @@
-"""syscall → class 归类规则。手写、确定性、可审计。非 LLM。"""
+"""syscall → behavior class mapping. Hand-written, deterministic, auditable (not LLM).
+
+Terminology: a "class" is the abstract behavior bucket a syscall maps to
+(e.g. file-write, network, exec). The event pipeline uses these classes for
+claims reconciliation. Severity drives report display.
+"""
 import re
 
-# class 严重度（report 用）
+# Severity per class (used in reports).
 SEVERITY = {
     "file-write": "high",
     "network": "high",
@@ -21,129 +26,61 @@ SEVERITY = {
 
 _WRITE_SYSCALLS = {
     "write", "writev", "pwrite", "pwritev", "sendfile",
-    "pwrite64", "sendfile64",  # 64 位变体(amd64 glibc 噪音)
+    "pwrite64", "sendfile64",  # 64-bit variants (amd64 glibc noise)
 }
 _READ_SYSCALLS = {
-    "read",
-    "readv",
-    "pread",
-    "preadv",
-    "pread64",  # amd64 运行时噪音:glibc 用 pread64 代替 pread
-    "getdents",
-    "getdents64",
-    "stat",
-    "fstat",
-    "lstat",
-    "faccessat",
-    "access",
-    "newfstatat",
+    "read", "readv", "pread", "preadv",
+    "pread64",  # amd64 runtime noise: glibc calls pread64 instead of pread
+    "getdents", "getdents64",
+    "stat", "fstat", "lstat", "faccessat", "access", "newfstatat",
 }
 _OPEN_SYSCALLS = {"open", "openat", "openat2", "creat"}
 _NETWORK_SYSCALLS = {
-    "connect",
-    "sendto",
-    "sendmsg",
-    "bind",
-    "socket",
-    "accept",
-    "accept4",
-    "recvfrom",
-    "recvmsg",
-    "recv",
-    "send",
-    "sendmmsg",
-    "recvmmsg",
+    "connect", "sendto", "sendmsg", "bind", "socket",
+    "accept", "accept4", "recvfrom", "recvmsg", "recv",
+    "send", "sendmmsg", "recvmmsg",
 }
 _EXEC_SYSCALLS = {"execve", "execveat"}
-# 危险进程操作：杀/调试/注入。创建子进程(fork/clone)另归 fork 类。
+# Dangerous process ops (kill/debug/inject). Child creation (fork/clone) is "fork".
 _PROCESS_SYSCALLS = {"kill", "ptrace", "tgkill"}
-# 创建子进程：shell 管道/脚本必用，良性（子进程行为由 strace -f 跟踪）
+# Child processes: required by shell pipelines/scripts; benign (traced via -f).
 _FORK_SYSCALLS = {"clone", "clone3", "fork", "vfork"}
 _PERMS_SYSCALLS = {"chmod", "fchmod", "chown", "fchown", "mount", "symlink", "mknod"}
 _FS_WRITE_SYSCALLS = {
-    "mkdir",
-    "mkdirat",
-    "unlink",
-    "unlinkat",
-    "rename",
-    "renameat",
-    "renameat2",
-    "truncate",
-    "ftruncate",
+    "mkdir", "mkdirat", "unlink", "unlinkat", "rename", "renameat", "renameat2",
+    "truncate", "ftruncate",
 }
-# 运行时噪音（动态链接/堆管理/线程同步）——分到明确 class，不落 other
-_MEMORY_SYSCALLS = {"mmap", "munmap", "mprotect", "brk", "mremap", "madvise", "msync", "membarrier"}
+# Runtime noise (dynamic linking / heap / thread sync) — classified, not "other".
+_MEMORY_SYSCALLS = {
+    "mmap", "munmap", "mprotect", "brk", "mremap", "madvise", "msync", "membarrier",
+}
 _SYNC_SYSCALLS = {
-    "futex",
-    "rseq",
-    "set_robust_list",
-    "set_tid_address",
-    "prlimit64",
-    "getrandom",
-    "getpid",
-    "gettid",
-    "clock_gettime",
-    "clock_getres",
-    "nanosleep",
-    "sched_yield",
-    "arch_prctl",
-    "sched_getaffinity",
-    "getcpu",
-    "getppid",
-    "rt_sigreturn",
-    "wait4",
-    "waitid",
-    # 信号处理 + 身份/系统信息（python3 运行时高频出现，属安全噪音）
-    "rt_sigaction",
-    "rt_sigprocmask",
-    "sigaction",
-    "sigprocmask",
-    "getuid",
-    "geteuid",
-    "getgid",
-    "getegid",
-    "uname",
+    "futex", "rseq", "set_robust_list", "set_tid_address", "prlimit64",
+    "getrandom", "getpid", "gettid", "clock_gettime", "clock_getres",
+    "nanosleep", "sched_yield", "arch_prctl", "sched_getaffinity", "getcpu",
+    "getppid", "rt_sigreturn", "wait4", "waitid",
+    # signal handling + identity/system info (python3 runtime, security noise)
+    "rt_sigaction", "rt_sigprocmask", "sigaction", "sigprocmask",
+    "getuid", "geteuid", "getgid", "getegid", "uname",
 }
-# 文件系统元信息探询（读性质，非写）
-_FS_INSPECT = {"getcwd", "readlinkat", "readlink"}  # readlink:amd64 glibc 常用,readlinkat 的同辈
+# File-system metadata probes (read-like, not writes).
+_FS_INSPECT = {"getcwd", "readlinkat", "readlink"}
 _FD_SYSCALLS = {
-    "close",
-    "dup",
-    "dup2",
-    "dup3",
-    "fcntl",
-    "ioctl",
-    "poll",
-    "ppoll",
-    "select",
-    "pselect6",
-    "epoll_create1",
-    "epoll_ctl",
-    "epoll_wait",
-    "eventfd2",
-    "pipe",
-    "pipe2",
-    "socketpair",
-    "setsockopt",
-    "getsockopt",
-    "shutdown",
-    "lseek",
-    "lseek64",
-    "getsockname",
-    "getpeername",
-    "fadvise64",
-    "fadvise64_64",
+    "close", "dup", "dup2", "dup3", "fcntl", "ioctl",
+    "poll", "ppoll", "select", "pselect6", "epoll_create1", "epoll_ctl", "epoll_wait",
+    "eventfd2", "pipe", "pipe2", "socketpair", "setsockopt", "getsockopt", "shutdown",
+    "lseek", "lseek64", "getsockname", "getpeername", "fadvise64", "fadvise64_64",
 }
 
 _FD_RE = re.compile(r"^\s*(\d+)")
 _PATH_RE = re.compile(r'"([^"]*)"')
-# 网络目标提取：strace connect 显示 {sa_family=AF_INET, sin_port=htons(443), sin_addr=inet_addr("1.1.1.1")}
+# Network target: strace connect shows {sa_family=AF_INET, sin_port=htons(443), sin_addr=inet_addr("1.1.1.1")}
 _SIN_PORT_RE = re.compile(r"sin_port=htons\((\d+)\)")
 _SIN_ADDR_RE = re.compile(r'inet_addr\("([^"]+)"\)')
-# 这些 syscall 的参数第一个不是路径（write(fd,..) 的内容里可能含引号字符串）
+# These syscalls' first arg is NOT a path (write content may contain quoted strings).
 _NO_PATH_SYSCALLS = {"write", "writev", "pwrite", "pwritev", "sendfile", "sendfile64"}
 
-# fd 路由追踪：这些 syscall 返回 fd / 参数首项是 fd
+# fd routing: syscalls returning an fd / consuming an fd as first arg.
 _FD_RETURN = {"socket", "socketpair", "open", "openat", "openat2", "creat"}
 _FD_DUP = {"dup", "dup2", "dup3"}
 _FD_OPS = {
@@ -155,12 +92,13 @@ _FD_OPS = {
 
 
 def _first_fd(args: str) -> int | None:
+    """Return the leading fd number in args, or None."""
     m = _FD_RE.match(args or "")
     return int(m.group(1)) if m else None
 
 
 def _ret_fd(ret: str) -> int | None:
-    """成功返回的 fd（负数/‘?’/未知均 None）。"""
+    """Return the returned fd on success; None for '?'/negative/unknown."""
     if not ret:
         return None
     r = ret.split()[0]
@@ -168,7 +106,8 @@ def _ret_fd(ret: str) -> int | None:
         return None
     return int(r)
 
-# 声明模式可接受的意图模式（create 最受限，overwrite 全接受）
+
+# Declared modes and the actual intents each covers (create is strictest).
 MODE_ALLOWS = {
     "create": {"create"},
     "append": {"create", "append"},
@@ -177,12 +116,10 @@ MODE_ALLOWS = {
 
 
 def write_attrs(syscall: str, args: str) -> tuple[str | None, str | None]:
-    """从写类 syscall 提取（目标路径, 意图模式）。带路径的 open 才可判定。
+    """Extract (target path, intent mode) from a write-class syscall.
 
-    模式判定（不开语言旗标，只看 strace 文本里的 flag）：
-      O_TRUNC  → overwrite（清空重建）
-      O_APPEND → append（追加尾部）
-      其他     → create（新建）
+    Mode is judged from strace text flags only (no language-specific flags):
+    O_TRUNC → overwrite, O_APPEND → append, else → create.
     """
     if syscall in _NO_PATH_SYSCALLS:
         return None, None
@@ -198,7 +135,11 @@ def write_attrs(syscall: str, args: str) -> tuple[str | None, str | None]:
 
 
 def classify(syscall: str, args: str) -> str:
-    """单个 syscall 调用 → class。含 fd 判断（write(1) 是 stdout 不是 file-write）。"""
+    """Classify a single syscall call into a behavior class.
+
+    Includes fd dispatch: write(1) is stdout, write(2) is stderr,
+    everything else handled by the write/read sets below.
+    """
     if syscall in {"exit", "exit_group"}:
         return "exit"
     if syscall in _WRITE_SYSCALLS:
@@ -238,7 +179,7 @@ def classify(syscall: str, args: str) -> str:
 
 
 def net_attrs(args: str) -> tuple[str | None, int | None]:
-    """从网络 syscall args 提取（目标 IP, 端口）。解析不到返回 None。"""
+    """Extract (target IP, port) from network syscall args; None if unparseable."""
     m = _SIN_ADDR_RE.search(args or "")
     ip = m.group(1) if m else None
     mp = _SIN_PORT_RE.search(args or "")
@@ -247,17 +188,16 @@ def net_attrs(args: str) -> tuple[str | None, int | None]:
 
 
 def route_fds(events: list[dict]) -> None:
-    """状态化 fd 路由：跟踪 socket/open 返回的 fd 类型，归正 fd 操作的 class。
+    """Resolve fd→kind (stateful) and re-classify fd operations.
 
-    修一个真实发现：SSL 往 socket fd 写数据（write(3,...)，fd 既非 1 也非 2）
-    会被 classify 误判成 file-write，把网络流量当文件写入。跟踪后：
-      socket()=3  → 3:net；open()=4 → 4:file；dup/close 维护表。
-    之后 write/read(3) → network；write/read(4) → file-write/file-read。
-    多进程：每 pid 一张表（strace -f）；fork 继承略过（边界情况可接受）。
+    Fixes a real finding: SSL writes to a socket fd (write(3,...), fd neither 1
+    nor 2) were misread as file-write. After tracking: socket()=3 → 3:net,
+    open()=4 → 4:file, dup/close maintained. Then write/read(3)→network,
+    write/read(4)→file. One table per pid (-f); fork inheritance skipped (edge).
     """
     tables: dict[int, dict[int, str]] = {}
     for e in events:
-        # fd 1/2 是进程标准流,dup/dup2 到别的 fd 后写入仍属 stdout/stderr
+        # fd 1/2 are the process's std streams; dup'ing them keeps stdout/stderr.
         ctx = tables.setdefault(e["pid"], {1: "stdout", 2: "stderr"})
         sc, args, ret = e["syscall"], e.get("args") or "", e.get("ret")
         fd = _ret_fd(ret)
@@ -282,8 +222,9 @@ def route_fds(events: list[dict]) -> None:
                 elif k == "file":
                     e["class"] = "file-write" if sc in {"write", "writev", "pwrite", "pwritev", "sendfile"} else "file-read"
                 elif k in ("stdout", "stderr"):
-                    e["class"] = k  # dup2(1, 3) 后 write(3) 仍是 stdout,不误判 file-write
+                    e["class"] = k  # write(3) after dup2(1,3) is still stdout
 
 
 def _open_flags_write(args: str) -> bool:
+    """True when open args request write access."""
     return "O_WRONLY" in args or "O_RDWR" in args or "O_CREAT" in args or "O_TRUNC" in args

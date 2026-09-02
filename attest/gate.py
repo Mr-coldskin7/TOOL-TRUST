@@ -1,15 +1,16 @@
-"""消费决策闸 gate：agent 在 bash runtime 里调用工具前的把关（决策时，非 per-call 沙箱）。
+"""Decision gate: what the agent consults before invoking a tool.
 
-tool-trust 的产出是 attestation report（体检证书），不是"每次调用都加锁/隔离"。
-真实运行属于工具所在的 runtime agent（bash）本身，这里只做**决策时**把关：
+tool-trust produces attestation reports (health certificates); it does NOT
+sandbox every call. The tool runs inside the runtime (agent's bash) — the gate
+only makes decisions, without running the tool:
 
-  闸 1　attestation 校验　：缓存报告 verdict=fail → 直接拒绝，不让它被使用/运行
-  闸 2　requires 硬拒　　　：缺任一前置 → 拒绝(env-mismatch)，不运行，省 token/算力
-  都过 → 放行，交给调用方在 runtime 里正常执行（不做 kernel 隔离）。
+  Gate 1  attestation: cached report verdict=fail → deny
+  Gate 2  requires   : any prerequisite missing → deny (env-mismatch), no run
+  Gate 3  provenance : a tool with an ID must prove it is still the same tool —
+                       tampered source / stale report / stale version → deny
 
-这是 #1 优先级(attestation report → MCP 消费)的落地：
-  agent 只看到/只调用通过闸门的工具；违规或前置缺失的工具在调用时被硬拒，
-  且不会白白浪费算力去跑一个跑不动的工具。
+Note: claims (what it does) are checked at attest time by reconcile; provenance
+checks "still the same verified artifact".
 """
 import json
 import pathlib
@@ -20,7 +21,7 @@ from attest import prereq, provenance, telemetry
 
 
 def load_attestation_verdict(tool_dir: pathlib.Path) -> str | None:
-    """读工具目录下缓存的 attestation report 的 verdict；无/坏返回 None(不拦截)。"""
+    """Read cached report verdict; None if missing/corrupt (no interception)."""
     p = tool_dir / "report.json"
     if not p.exists():
         return None
@@ -33,7 +34,7 @@ def load_attestation_verdict(tool_dir: pathlib.Path) -> str | None:
 
 
 def load_report(tool_dir: pathlib.Path) -> dict | None:
-    """读整份缓存报告（无/坏返回 None）。闸 3 provenance 用读快照。"""
+    """Read full cached report (None if missing/corrupt). Used by gate 3."""
     p = tool_dir / "report.json"
     if not p.exists():
         return None
@@ -44,6 +45,7 @@ def load_report(tool_dir: pathlib.Path) -> dict | None:
 
 
 def _deny(manifest: dict, reason: str, extra: dict | None = None) -> dict:
+    """Build a deny result and log it to telemetry."""
     d = {"decision": "deny", "reason": reason, "tool": manifest["name"]}
     if extra:
         d.update(extra)
@@ -52,24 +54,26 @@ def _deny(manifest: dict, reason: str, extra: dict | None = None) -> dict:
 
 
 def decide(manifest: dict, tool_dir: pathlib.Path) -> dict:
-    """决策闸：给"这个工具现在能不能被使用"下结论。纯逻辑，不运行工具。
+    """Decide whether the tool may be used right now. Pure logic, no execution.
 
-    闸 1  attestation：缓存报告 verdict=fail → 拒绝
-    闸 2  requires   ：缺任一前置 → 拒绝(env-mismatch)，不运行省 token/算力
-    闸 3  provenance ：有身份证的工具必须证明「还是原来那个」——
-          源码哈希被改(tampered)/缓存报告无快照(stale)/版本漂移(stale-version) → 拒绝
+    Args:
+      manifest: tool.yaml contents.
+      tool_dir: tool directory (holds report.json, source files).
+
+    Returns:
+      {"decision": "allow"|"deny", "reason": ..., "tool": ...}
     """
-    # 闸 1：attestation 判 fail → 拒绝
+    # Gate 1: failed attestation → deny
     verdict = load_attestation_verdict(tool_dir)
     if verdict == "fail":
         return _deny(manifest, "attestation-fail")
 
-    # 闸 2：requires 硬拒 —— 缺任一前置 → 拒绝，省 token/算力
+    # Gate 2: missing prerequisites → deny (saves tokens/compute)
     check = prereq.hard_check(manifest.get("requires"), cwd=str(tool_dir))
     if check["verdict"] != "pass":
         return _deny(manifest, "env-mismatch", {**check})
 
-    # 闸 3：provenance —— 有身份证的工具必须证明「还是原来那个」
+    # Gate 3: provenance — a tool with an ID must prove it is unchanged
     prov = manifest.get("provenance")
     if prov:
         declared = prov.get("hash") or ""
@@ -77,16 +81,16 @@ def decide(manifest: dict, tool_dir: pathlib.Path) -> dict:
         rp = (load_report(tool_dir) or {}).get("provenance")
         if not rp:
             return _deny(manifest, "stale", {
-                "detail": "cached attestation has no provenance snapshot; re-observe (--save-report)"})
+                "detail": "no provenance snapshot in cached attestation; re-observe (--save-report)"})
         declared_v, observed_v = prov.get("version"), rp.get("version")
         hash_changed = bool(declared) and cur != declared
         version_changed = bool(declared_v) and observed_v != declared_v
         if hash_changed and not version_changed:
-            # 源码变了但版本没变 → 疑似被换内容,且没声称升级 → 篡改
+            # source changed without a version bump → likely tampering
             return _deny(manifest, "tampered", {
                 "detail": f"source hash {cur[:12]} != declared {declared[:12]}, version unchanged"})
         if version_changed:
-            # 版本变了(源码动没动都算)→ 可能是正常升级,旧证明作废 → 重检
+            # version changed (code or not) → normal upgrade, old proof expired
             return _deny(manifest, "stale-version", {
                 "detail": f"observed {observed_v!r} -> declared {declared_v!r}; re-observe (--save-report)"})
 
@@ -96,25 +100,26 @@ def decide(manifest: dict, tool_dir: pathlib.Path) -> dict:
 
 
 def format_command(manifest: dict, inputs: list[str], tool_dir: pathlib.Path) -> list[str]:
-    """命令 + 输入 → argv。相对命令基于工具目录解析（工具以此目录为 cwd 运行）。"""
+    """Build argv: command + inputs. Relative commands resolve against tool_dir."""
     cmd = manifest["command"].split()
     if cmd:
         first = cmd[0]
         if not pathlib.Path(first).is_absolute() and shutil.which(first) is None:
-            # 相对工具目录的命令(如 ./test) → 拼完整路径；PATH 可执行(python3)不动
+            # ./test → <tool_dir>/test ; PATH executables (python3) stay as-is
             cmd[0] = str(tool_dir / first)
     return cmd + inputs
 
 
-def gated_invoke(
-    manifest: dict,
-    inputs: list[str],
-    tool_dir: pathlib.Path,
-) -> dict:
-    """带决策闸地调用工具。deny → 直接返回拒绝(不运行)；allow → 在 runtime 里正常执行。
+def gated_invoke(manifest: dict, inputs: list[str], tool_dir: pathlib.Path) -> dict:
+    """Invoke a tool through the decision gate (deny → no run, allow → subprocess).
 
-    真实运行就是普通 subprocess（agent 的 bash runtime 上下文），不再套内核沙箱——
-    改造成本远大于收益，工具本就活在它所在 runtime 的约束里。
+    Args:
+      manifest: tool.yaml contents.
+      inputs:   extra argv entries.
+      tool_dir: cwd for the process.
+
+    Returns:
+      Result dict with decision/returncode/stdout/stderr (or deny/launch_error).
     """
     d = decide(manifest, tool_dir)
     if d["decision"] != "allow":
@@ -124,7 +129,6 @@ def gated_invoke(
     try:
         result = subprocess.run(argv, capture_output=True, text=True, cwd=str(tool_dir))
     except OSError as exc:
-        # 启动失败（二进制不存在/平台不匹配等）：结构化返回 + 记日志，不抛裸异常
         out = {
             "tool": manifest["name"],
             "decision": "allow",

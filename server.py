@@ -1,21 +1,30 @@
-# server.py
+"""MCP server: auto-load tools from tools/*/tool.py, filtering failed attestation.
+
+Consumption gate: a tool directory with a cached report verdict=fail is skipped
+at registration — the agent never even sees it.
+"""
 import importlib
 import pathlib
+
 from fastmcp import FastMCP
 
 from attest import gate
 
 
 def load_tools(mcp: FastMCP, tools_dir: pathlib.Path = pathlib.Path("tools")) -> int:
-    """扫描 tools/*/tool.py，import 并调用其 register(mcp)。返回加载数。
+    """Scan tools/*/tool.py, import each, call register(mcp). Returns count loaded.
 
-    消费闸门一：注册前拒绝不合规工具 —— 带缓存 attestation report 且 verdict=fail
-    的工具目录直接跳过(不 import、不注册)，agent 根本看不到它。
+    Args:
+      mcp:       FastMCP instance to register tools on.
+      tools_dir: tool root directory.
+
+    Returns:
+      Number of successfully loaded tools.
     """
     count = 0
     for p in sorted(tools_dir.glob("*/tool.py")):
         if gate.load_attestation_verdict(p.parent) == "fail":
-            continue  # attestation fail → 拒绝注册
+            continue  # failed attestation → refuse registration
         module_path = f"{tools_dir.name}.{p.parent.name}.tool"
         mod = importlib.import_module(module_path)
         mod.register(mcp)
@@ -28,7 +37,7 @@ if __name__ == "__main__":
 
     mcp = FastMCP("toolhub")
     n = load_tools(mcp)
-    print(f"loaded {n} tool(s)", file=sys.stderr)  # stdio 时 stdout 只走 MCP 协议
+    print(f"loaded {n} tool(s)", file=sys.stderr)  # stdio: stdout stays MCP protocol
 
     if "--stdio" in sys.argv:
         mcp.run(transport="stdio")

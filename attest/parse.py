@@ -1,9 +1,14 @@
-"""strace 文本 → 结构化事件。确定性正则解析，不赌 strace JSON 版本。"""
+"""strace text → structured events.
+
+Deterministic regex parsing; does not depend on strace JSON output versions.
+Each event: {pid, syscall, args, ret}. Failed calls (negative return) are kept —
+a blocked attempt (rejected connect, failed open) is evidence too.
+"""
 import re
 
-# 典型 strace 行：`12345 openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3`
-# 失败调用带负数返回值：`12345 openat(...) = -1 ENOENT (No such file or directory)`
-# 负数必须捕获——未遂的越界操作（connect 被拒、写文件失败）同样是要证据的
+# Typical line: `12345 openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3`
+# Failed call:  `12345 openat(...) = -1 ENOENT (No such file or directory)`
+# Negative returns must be captured — unsuccessful out-of-scope attempts are evidence.
 _EVENT_RE = re.compile(
     r"^\s*(?P<pid>\d+)\s+"
     r"(?P<syscall>[A-Za-z0-9_]+)\((?P<args>.*)\)"
@@ -12,7 +17,14 @@ _EVENT_RE = re.compile(
 
 
 def parse_strace(text: str) -> list[dict]:
-    """strace 输出 → 事件列表。未知格式行跳过（strace 跨版本差异）。"""
+    """Parse strace output into a list of event dicts (unknown lines skipped).
+
+    Args:
+      text: str: 
+
+    Returns:
+
+    """
     events = []
     for line in text.splitlines():
         m = _EVENT_RE.match(line)

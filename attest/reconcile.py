@@ -1,14 +1,16 @@
-"""claims vs 观察事件 对账。确定性逻辑，默认拒绝。
+"""Reconcile claims against observed events. Deterministic; default-deny.
 
-对账规则：
+Terms: claims = behavior the tool declares in tool.yaml; class = the behavior
+bucket a syscall maps to (file-write / network / exec / ...).
 
-  第一关 class：     事件.class 必须出现在 allow 里，否则 violation (not-claimed)
-  第二关 paths：     file-write 必须命中某条声明的 paths 白名单，否则 violation (out-of-scope)
-  第三关 mode：      实际意图模式必须被声明模式覆盖，否则 violation (mode-exceeded)
-  network.hosts：    若 network 声明带 hosts 白名单，所有带目标 IP 的网络事件必须
-                     命中声明的 host 解析出的 IP 集合，否则 violation (net-out-of-scope)
+Reconciliation (three levels for side effects):
+  1. class   event.class must be in allow, else violation (not-claimed)
+  2. paths   file-write must hit a declared paths whitelist (else out-of-scope)
+  3. mode    actual write intent must be covered by declared mode (mode-exceeded)
+  network.hosts: with a hosts whitelist, every network event's target IP must be
+                 in the whitelisted hosts' resolved IP set (net-out-of-scope)
 
-其它无副作用 class（stdout/exit/file-read…）只需过第一关。
+Innocuous classes (stdout/exit/file-read/...) only need level 1.
 """
 import posixpath
 import socket
@@ -17,27 +19,22 @@ from attest.rules import MODE_ALLOWS
 
 
 def _normalize_allow(allow: list) -> list[dict]:
-    """兼容旧格式：字符串 'file-read' → {'class': 'file-read'}"""
+    """Normalize legacy string entries ('file-read') into dict form ({'class': ...})."""
     out = []
     for item in allow:
-        if isinstance(item, str):
-            out.append({"class": item})
-        else:
-            out.append(item)
+        out.append({"class": item} if isinstance(item, str) else item)
     return out
 
 
 def _path_in_paths(path: str, paths: list[str]) -> bool:
-    """路径白名单判定：normpath 折叠 `..` + 目录边界。
+    """Whether path lies under one of the whitelist prefixes (directory boundary).
 
-    防真实逃逸洞：白名单只声明 `/tmp/`，攻击者写 `/tmp/../etc/x` 时内核会
-    normalize 成 `/etc/x`，旧式 startswith 判定会放行。现在先 normpath，
-    再用精确目录边界(`base` 或 `base + "/"`)匹配。
+    normpath collapses `..` first, then matches "equals prefix" or "inside
+    prefix directory", so `/tmp/../etc/x` cannot escape a `/tmp` whitelist.
     """
     p = posixpath.normpath(path)
     for pref in paths:
         base = posixpath.normpath(pref)
-        # 根 / 是边界特例: base + "/" 会变成 "//",永远匹配不上
         prefix = base.rstrip("/") + "/" if base != "/" else "/"
         if p == base or p.startswith(prefix):
             return True
@@ -45,7 +42,7 @@ def _path_in_paths(path: str, paths: list[str]) -> bool:
 
 
 def _default_resolver(hosts: list[str]) -> set[str]:
-    """把声明的 host 解析成 IP 集。解析失败的 host 跳过（不因 DNS 抖动全盘否决）。"""
+    """Resolve declared hosts to an IP set; unresolvable hosts are skipped."""
     out: set[str] = set()
     for h in hosts:
         try:
@@ -59,9 +56,15 @@ def _default_resolver(hosts: list[str]) -> set[str]:
 def reconcile(
     events: list[dict], claims: dict, resolver=None
 ) -> list[dict]:
-    """事件列表对账 claims。返回 violation 列表，含证据。
+    """Reconcile events against claims; return violation list (empty = compliant).
 
-    resolver 可注入（测试确定性用）：hosts -> IP 集。
+    Args:
+      events: classified events.
+      claims: tool.yaml claims ({allow, deny}).
+      resolver: optional host->IP resolver (deterministic for tests).
+
+    Returns:
+      List of violation dicts with class/reason/syscalls/evidence/detail.
     """
     allow = _normalize_allow(claims.get("allow", []))
     deny = set(claims.get("deny", []))
@@ -80,7 +83,7 @@ def reconcile(
             _add(violations, c, "denied", evs)
             continue
         if not decls:
-            # 无副作用 class 有事件但没声明 → 默认拒绝
+            # events for an unclaimed side-effect class → default deny
             _add(violations, c, "not-claimed", evs)
             continue
         if c == "file-write":
@@ -94,11 +97,10 @@ def reconcile(
 def _check_network_hosts(
     decls: list[dict], evs: list[dict], violations: list[dict], resolver
 ) -> None:
-    """network 声明带 hosts 白名单 → 带目标 IP 的事件必须命中解析集合。
+    """network claims with hosts → events with a target IP must hit the set.
 
-    豁免两类基础设施流量（不是工具的数据目标）：
-      - port 53：DNS 解析（工具解析白名单 host 本身就要查 DNS）
-      - 127.x：本机/容器内部连接（如 Docker embedded DNS 127.0.0.11）
+    Exempts infrastructure traffic that is not the tool's data target:
+    port 53 (DNS resolution) and 127.x (container-internal, e.g. Docker DNS).
     """
     host_decls = [d for d in decls if isinstance(d, dict) and d.get("hosts")]
     if not host_decls:
@@ -112,7 +114,7 @@ def _check_network_hosts(
         if not ip:
             continue
         if port == 53 or ip.startswith("127."):
-            continue  # DNS/本机基础设施流量
+            continue
         if ip not in allowed:
             _add_one(
                 violations,
@@ -125,16 +127,15 @@ def _check_network_hosts(
 def _check_file_write(
     decls: list[dict], evs: list[dict], violations: list[dict]
 ) -> None:
-    """file-write 二级判定：paths 白名单 + mode 覆盖。"""
+    """file-write two-level check: paths whitelist, then mode coverage."""
     for ev in evs:
         path = ev.get("path")
         mode = ev.get("mode")
-        # 无法提取路径的事件（如 write(fd)），其 openat 同属一件事已判定过，
-        # 无法单独证明在范围内 → 保守放行（openat 那次的判定为准）
+        # Events without a path (write(fd)) cannot be judged alone; their
+        # openat already was. Conservative pass — the openat decision stands.
         if path is None:
             continue
 
-        # 第二关：路径必须在某条声明的白名单内
         in_scope = [d for d in decls if _path_in_paths(path, d.get("paths", []))]
         if not in_scope:
             _add_one(
@@ -145,14 +146,12 @@ def _check_file_write(
             )
             continue
 
-        # 第三关：意图模式必须被覆盖（声明 create 却 O_TRUNC = 违规）
         allowed_modes = set()
         for d in in_scope:
             m = d.get("mode")
-            if m and m in MODE_ALLOWS:
-                allowed_modes |= MODE_ALLOWS[m]
-            else:
-                allowed_modes |= MODE_ALLOWS["overwrite"]  # 未声明 mode = 宽松
+            allowed_modes |= (
+                MODE_ALLOWS[m] if m and m in MODE_ALLOWS else MODE_ALLOWS["overwrite"]
+            )
         if mode is not None and mode not in allowed_modes:
             _add_one(
                 violations,
@@ -163,6 +162,7 @@ def _check_file_write(
 
 
 def _add(violations: list[dict], c: str, reason: str, evs: list[dict]) -> None:
+    """Record one aggregated violation for a whole event class."""
     violations.append(
         {
             "class": c,
@@ -174,6 +174,7 @@ def _add(violations: list[dict], c: str, reason: str, evs: list[dict]) -> None:
 
 
 def _add_one(violations: list[dict], ev: dict, reason: str, detail: str) -> None:
+    """Record one violation for a single event, with detail."""
     violations.append(
         {
             "class": ev.get("class", "file-write"),

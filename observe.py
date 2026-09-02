@@ -1,8 +1,9 @@
-"""attest 观察管道 CLI。
+"""attest observation pipeline CLI.
 
-用法：
-  python observe.py <tool> <input...>              # 单输入 → 单报告
-  python observe.py <tool> --generate-claims <input...>  # 建 claims 基线
+Usage:
+  python observe.py <tool> <input...>                    # one input → one report
+  python observe.py <tool> --generate-claims <input...>  # build claims baseline
+  python observe.py <tool> --save-report <input...>      # persist report.json (gate cache)
 """
 import argparse
 import json
@@ -16,30 +17,43 @@ TOOLS_DIR = pathlib.Path("tools")
 
 
 def load_manifest(tool: str) -> dict:
+    """Load tools/<tool>/tool.yaml as dict."""
     p = TOOLS_DIR / tool / "tool.yaml"
     with open(p) as f:
         return yaml.safe_load(f)
 
 
 def _drop_launch_execve(events: list[dict]) -> list[dict]:
-    """剔除工具自身启动的 execve（第一条）。子进程 exec 保留——那才是真 exec。"""
+    """Drop the tool's own launch execve (first event); keep child execves."""
     if events and events[0]["syscall"] in ("execve", "execveat"):
         return events[1:]
     return events
 
 
 def annotate(events: list[dict]) -> None:
-    """给事件标注 class（及 file-write 的 path/mode）。就地修改。"""
+    """Annotate events with class (plus path/mode for writes, ip/port for nets).
+
+    In-place. Then run fd routing to correct socket writes to 'network'.
+    """
     for e in events:
         e["class"] = rules.classify(e["syscall"], e["args"])
         if e["class"] == "file-write":
             e["path"], e["mode"] = rules.write_attrs(e["syscall"], e["args"])
         if e["class"] == "network":
             e["ip"], e["port"] = rules.net_attrs(e["args"])
-    rules.route_fds(events)  # 状态化 fd 路由：socket fd 的 write/read 归正为 network
+    rules.route_fds(events)
 
 
 def observe(tool: str, inputs: list[str]) -> dict:
+    """Full pipeline for one tool+input: build → trace → classify → reconcile.
+
+    Args:
+      tool: tool name under tools/.
+      inputs: argv entries to run during observation.
+
+    Returns:
+      Attestation report dict (verdict 'pass'/'fail', violations, provenance).
+    """
     manifest = load_manifest(tool)
     tool_dir = TOOLS_DIR / tool
     build.build_tool(manifest, tool_dir)
@@ -54,7 +68,7 @@ def observe(tool: str, inputs: list[str]) -> dict:
 
 
 def save_report(tool: str, r: dict) -> pathlib.Path:
-    """把体检报告落盘到 tools/<tool>/report.json —— gate 读这份缓存做决策。"""
+    """Persist report to tools/<tool>/report.json (the gate's decision cache)."""
     p = TOOLS_DIR / tool / "report.json"
     p.write_text(json.dumps(r, ensure_ascii=False, indent=2))
     print(f"report written to {p}")
@@ -62,6 +76,12 @@ def save_report(tool: str, r: dict) -> pathlib.Path:
 
 
 def generate_claims(tool: str, inputs: list[str]) -> None:
+    """Build a claims baseline from one clean run and write it back to tool.yaml.
+
+    Args:
+      tool: tool name.
+      inputs: observation argv.
+    """
     manifest = load_manifest(tool)
     tool_dir = TOOLS_DIR / tool
     build.build_tool(manifest, tool_dir)
@@ -71,10 +91,9 @@ def generate_claims(tool: str, inputs: list[str]) -> None:
 
     observed = sorted({e["class"] for e in events})
     known = set(rules.SEVERITY)
-    # other 永远不允许进 allow——它是未知行为，默认拒绝的兜底
-    allow = [c for c in observed if c != "other"]
+    allow = [c for c in observed if c != "other"]  # other never allowed (default deny)
 
-    # file-write 结构化：聚合路径 + 严上限 mode
+    # structured file-write: aggregate paths + strictest mode
     fw = [e for e in events if e["class"] == "file-write" and e.get("path")]
     if fw:
         import posixpath
@@ -103,7 +122,12 @@ def generate_claims(tool: str, inputs: list[str]) -> None:
 
 
 def generate_requires(tool: str, inputs: list[str]) -> None:
-    """从一次观察运行推断工具的真实前置条件(requires)并写回 tool.yaml。"""
+    """Infer requires from one observed run and write it back to tool.yaml.
+
+    Args:
+      tool: tool name.
+      inputs: observation argv.
+    """
     manifest = load_manifest(tool)
     tool_dir = TOOLS_DIR / tool
     build.build_tool(manifest, tool_dir)
@@ -111,15 +135,14 @@ def generate_requires(tool: str, inputs: list[str]) -> None:
     events = _drop_launch_execve(parse.parse_strace(text))
     annotate(events)
 
-    # file-write 声明的白名单路径 = 工具需要在宿主可写的区域 → requires.writable
+    # file-write whitelist paths → writable dirs the tool needs on the host
     writable = []
     for a in manifest.get("claims", {}).get("allow", []):
         if isinstance(a, dict) and a.get("class") == "file-write":
             writable += a.get("paths") or []
     inferred = prereq.infer_requires_full(events, writable)
 
-    # 合并而非覆盖：env/cwd 无法从 strace 推断，保留手动声明；
-    # exec 手动词条(python3)在推断为空时也保留。
+    # merge, don't overwrite: env/cwd unobservable; exec keeps manual entry
     old = manifest.get("requires") or {}
     requires = {
         "env": old.get("env") or [],
@@ -140,7 +163,12 @@ def generate_requires(tool: str, inputs: list[str]) -> None:
 
 
 def check_requires(tool: str, inputs: list[str]) -> dict:
-    """上岗前 pre-flight：硬校验 tool.yaml 的 requires。缺任一 → fail。"""
+    """Pre-flight hard check of the tool's requires; missing any → fail.
+
+    Args:
+      tool: tool name.
+      inputs: unused (kept for CLI symmetry).
+    """
     manifest = load_manifest(tool)
     check = prereq.hard_check(manifest.get("requires"), cwd=str(TOOLS_DIR / tool))
     print(json.dumps(check, ensure_ascii=False, indent=2))
@@ -148,14 +176,15 @@ def check_requires(tool: str, inputs: list[str]) -> dict:
 
 
 def main() -> None:
+    """CLI entry: dispatch on subcommand flags."""
     ap = argparse.ArgumentParser(prog="observe")
-    ap.add_argument("tool", help="tools/ 下的工具名")
+    ap.add_argument("tool", help="tool name under tools/")
     ap.add_argument("inputs", nargs="*", default=[])
     ap.add_argument("--generate-claims", action="store_true")
     ap.add_argument("--generate-requires", action="store_true")
     ap.add_argument("--check-requires", action="store_true")
     ap.add_argument("--save-report", action="store_true",
-                    help="把报告落盘到 tools/<tool>/report.json(gate 决策缓存)")
+                    help="write report.json (gate decision cache)")
     args = ap.parse_args()
 
     if args.generate_claims:
