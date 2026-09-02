@@ -40,6 +40,15 @@ def test_perms_and_unknown():
     assert classify("totally_unknown_syscall", "x") == "other"
 
 
+def test_amd64_glibc_variants_are_read_not_other():
+    # CI(amd64) 暴露的架构漂移:glibc 用 pread64/readlink 等 64 位变体,
+    # 若落进 other 会被 deny(claims 无 other),本地 arm64 却 pass → 跨架构不一致
+    assert classify("pread64", '3, "x", 4, 0') == "file-read"
+    assert classify("pwrite64", '3, "x", 4, 0') == "file-write"
+    assert classify("sendfile64", "3, 4, NULL, 8") == "file-write"
+    assert classify("readlink", '"/proc/self/exe", "buf", 255') == "file-read"
+
+
 def test_fork_split_from_process():
     # 创建子进程(clone/fork)是良性 fork 类；杀/调试仍是危险 process
     assert classify("clone", "CLONE_CHILD_CLEARTID") == "fork"

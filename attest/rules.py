@@ -19,12 +19,16 @@ SEVERITY = {
     "other": "medium",
 }
 
-_WRITE_SYSCALLS = {"write", "writev", "pwrite", "pwritev", "sendfile"}
+_WRITE_SYSCALLS = {
+    "write", "writev", "pwrite", "pwritev", "sendfile",
+    "pwrite64", "sendfile64",  # 64 位变体(amd64 glibc 噪音)
+}
 _READ_SYSCALLS = {
     "read",
     "readv",
     "pread",
     "preadv",
+    "pread64",  # amd64 运行时噪音:glibc 用 pread64 代替 pread
     "getdents",
     "getdents64",
     "stat",
@@ -101,7 +105,7 @@ _SYNC_SYSCALLS = {
     "uname",
 }
 # 文件系统元信息探询（读性质，非写）
-_FS_INSPECT = {"getcwd", "readlinkat"}
+_FS_INSPECT = {"getcwd", "readlinkat", "readlink"}  # readlink:amd64 glibc 常用,readlinkat 的同辈
 _FD_SYSCALLS = {
     "close",
     "dup",
