@@ -4,6 +4,7 @@ Usage:
   python observe.py <tool> <input...>                    # one input → one report
   python observe.py <tool> --generate-claims <input...>  # build claims baseline
   python observe.py <tool> --save-report <input...>      # persist report.json (gate cache)
+  python observe.py <tool> --scan <input...>             # srt permission discovery
 """
 import argparse
 import json
@@ -11,7 +12,7 @@ import pathlib
 
 import yaml
 
-from attest import build, contract, parse, prereq, provenance, reconcile, report, rules, run
+from attest import build, contract, parse, prereq, provenance, reconcile, report, rules, run, scan as scan_mod
 
 TOOLS_DIR = pathlib.Path("tools")
 
@@ -183,6 +184,27 @@ def check_requires(tool: str, inputs: list[str]) -> dict:
     return check
 
 
+def scan_tool(tool: str, inputs: list[str]) -> None:
+    """srt permission discovery: run the tool in a minimal sandbox, report needs.
+
+    Output is a SUGGESTION (evidence from a sandboxed smoke run). The operator
+    reviews it and writes the final srt-settings.json — enforcing is legislative.
+    """
+    from attest.gate import format_command
+
+    manifest = load_manifest(tool)
+    tool_dir = TOOLS_DIR / tool
+    argv = format_command(manifest, inputs, tool_dir)
+    r = scan_mod.scan(argv, cwd=str(tool_dir))
+    print(json.dumps({"tool": tool, **r}, ensure_ascii=False, indent=2))
+    if r["denials"]:
+        print(
+            f"\n>>> {tool} needs {len(r['denials'])} permission(s). Review the suggested"
+            f" settings; write them to {tool_dir / 'srt-settings.json'} to enforce.")
+    else:
+        print(f"\n>>> {tool} needed nothing beyond defaults. ({r['note']})")
+
+
 def approve_tool(tool: str, yes: bool = False) -> None:
     """Operator confirmation: observed-suggested claims → operator-approved.
 
@@ -225,10 +247,16 @@ def main() -> None:
                     help="write report.json (gate decision cache)")
     ap.add_argument("--approve", action="store_true",
                     help="operator-confirm claims: candidate → enforceable contract")
+    ap.add_argument("--scan", action="store_true",
+                    help="srt permission discovery: run in minimal sandbox, "
+                         "report what the tool needs (domains/paths)")
     ap.add_argument("--yes", action="store_true",
                     help="skip interactive confirm (with --approve)")
     args = ap.parse_args()
 
+    if args.scan:
+        scan_tool(args.tool, args.inputs)
+        return
     if args.generate_claims:
         generate_claims(args.tool, args.inputs)
         return

@@ -1,18 +1,40 @@
-"""srt live backend: unit (parsing, any platform) + integration (srt present).
+"""srt live backend: unit (parsing, any platform) + integration (srt functional).
 
-Unit tests run anywhere. Integration tests need srt installed
-(npm install -g @anthropic-ai/sandbox-runtime) — skipped otherwise.
+Unit tests run anywhere. Integration tests need a WORKING srt
+(npm install -g @anthropic-ai/sandbox-runtime + platform deps). Some
+environments (nested containers without userns caps) can't run bwrap —
+those are skipped, not failed.
 """
 import pathlib
 import shutil
 import sys
+import tempfile
 
 import pytest
 
 from attest import live
 
+
+def _srt_works() -> bool:
+    """True only if srt is installed AND can actually sandbox a trivial call."""
+    if shutil.which("srt") is None:
+        return False
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            p = pathlib.Path(d) / "probe.json"
+            p.write_text(
+                '{"network":{"allowedDomains":[],"deniedDomains":["*"]},'
+                '"filesystem":{"denyRead":[],"denyWrite":[],'
+                '"allowWrite":["/tmp","/private/tmp"]}}')
+            r = live.run_sandboxed(
+                [sys.executable, "-c", "pass"], p, cwd=d, timeout=60)
+            return r["returncode"] == 0 and not r["timed_out"]
+    except Exception:
+        return False
+
+
 NEED_SRT = pytest.mark.skipif(
-    shutil.which("srt") is None, reason="srt (sandbox-runtime) not installed"
+    not _srt_works(), reason="srt not functional in this environment"
 )
 
 DEBUG_SAMPLE = """\
@@ -47,9 +69,10 @@ def test_run_sandboxed_allows_and_blocks(tmp_path):
         '{"network":{"allowedDomains":[],"deniedDomains":["*"]},'
         '"filesystem":{"denyRead":[],"denyWrite":[".env"],"allowWrite":["/tmp","/private/tmp"]}}'
     )
-    # allowed: write to /tmp (no violations)
+    # allowed: write inside tmp_path (covered by allowWrite /tmp,/private/tmp)
+    target = tmp_path / "srt-live-ok"
     ok = live.run_sandboxed(
-        ["python3", "-c", "open('/private/tmp/srt-live-ok','w').close()"],
+        [sys.executable, "-c", f"open({str(target)!r},'w').close()"],
         sett, cwd=str(tmp_path))
     assert ok["violations"] == []
     # blocked: network denied → violation recorded

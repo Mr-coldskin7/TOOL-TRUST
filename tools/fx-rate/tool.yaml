@@ -26,6 +26,10 @@ claims:
   - perms
   - process
   - stderr
+  origin: operator-approved
+  approved_at: '2026-09-03T05:45:19+00:00'
 requires:
   exec:
   - python3
+sandbox:
+  srt_settings: srt-settings.json

@@ -36,6 +36,11 @@ jobs:
         run: |
           npm install -g @anthropic-ai/sandbox-runtime
           sudo apt-get update && sudo apt-get install -y bubblewrap ripgrep socat
+      - name: Verify srt can sandbox (diagnostic)
+        run: |
+          echo '{"network":{"allowedDomains":[],"deniedDomains":["*"]},"filesystem":{"denyRead":[],"denyWrite":[],"allowWrite":["/tmp"]}}' > /tmp/srt-verify.json
+          srt --debug --settings /tmp/srt-verify.json -c "echo srt-ok" 2>&1 | grep -v Skipping | tail -12
+        continue-on-error: true
       - name: Sync deps (locked)
         run: uv sync --frozen
       - name: Smoke — server starts & gate allows/denies
