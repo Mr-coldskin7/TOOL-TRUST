@@ -27,10 +27,10 @@ Two phases, two backends:
 ```
 ┌─────────────┐   container + strace   ┌──────────────────┐
 │  tool.py    │ ───────────────────────► │ candidate claims │   observe.py: ONE-TIME
-│  tool.yaml  │   observe.py            │  (observed-       │   discovery (容器观察只能建议,
-└─────────────┘                         │   suggested)      │   不能立约)
+│  tool.yaml  │   observe.py            │  (observed-       │   discovery (suggests,
+└─────────────┘                         │   suggested)      │   never defines boundaries)
                                         └────────┬─────────┘
-                                                 │  operator --approve (立法)
+                                                 │  operator --approve (legislation)
                                                  ▼
                                         ┌──────────────────┐
                                         │  contract         │
