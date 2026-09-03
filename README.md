@@ -22,27 +22,56 @@ No reputation scores, no manual security reviews. The first tool you write can a
 
 ## How It Works
 
+Two phases, two backends:
+
 ```
-┌─────────────┐     Docker + strace     ┌──────────────────┐
-│  tool.py    │ ────────────────────────► │  JSON report     │
-│  tool.yaml  │     observe.py          │  (verdict /      │
-└─────────────┘                         │   claims /       │
-                                        │   violations)    │
+┌─────────────┐   container + strace   ┌──────────────────┐
+│  tool.py    │ ───────────────────────► │ candidate claims │   observe.py: ONE-TIME
+│  tool.yaml  │   observe.py            │  (observed-       │   discovery (容器观察只能建议,
+└─────────────┘                         │   suggested)      │   不能立约)
+                                        └────────┬─────────┘
+                                                 │  operator --approve (立法)
+                                                 ▼
+                                        ┌──────────────────┐
+                                        │  contract         │
+                                        │  operator-approved│
                                         └────────┬─────────┘
                                                  │
-                    ┌────────────────────────────┼────────────────────────────┐
-                    │                            │                            │
-                    ▼                            ▼                            ▼
-            ┌───────────────┐          ┌───────────────┐          ┌──────────────────┐
-            │  server.py    │          │  gate.py      │          │  runtime agent   │
-            │  skips fail   │          │  requires +   │          │  calls tool if     │
-            │  attestation  │          │  claims check │          │  verdict=pass    │
-            └───────────────┘          └───────────────┘          └──────────────────┘
+                        ┌────────────────────────┼─────────────────────────┐
+                        ▼                        ▼                         ▼
+                ┌──────────────┐        ┌──────────────┐         ┌────────────────────┐
+                │  srt (exec)  │        │  gate.py     │         │  server.py         │
+                │ enforces each │        │ requires +   │         │ registers only     │
+                │ call: deny =  │        │ provenance + │         │ contracts that     │
+                │ out-of-scope │        │ verdict      │         │ passed attestation │
+                └──────────────┘        └──────────────┘         └────────────────────┘
 ```
 
-- **`observe.py`** is the one-time health check.
-- **`gate.py`** is the bouncer on every call.
-- **`server.py`** is the stdio MCP server that only registers tools whose latest report says `pass`.
+- **`observe.py`** — one-time candidate discovery in a container (suggests, never defines boundaries).
+- **`--approve`** — the operator legislates; only `operator-approved` claims may be enforced.
+- **`srt`** — enforces every approved call (seatbelt/bubblewrap); violations → report/audit.
+- **`gate.py`** — bouncer: verdict / requires / provenance gates, then hands approved contracts to srt.
+- **`server.py`** — stdio MCP server; registers tools whose contracts passed.
+
+---
+
+### 1. Install
+
+Requires Python 3.12+, `uv`, Docker (one-time candidate observation), and `srt` (enforcement):
+
+```bash
+npm install -g @anthropic-ai/sandbox-runtime   # srt CLI (sandbox runtime)
+# Linux only: the srt backend needs bubblewrap
+apt install bubblewrap
+```
+
+```bash
+git clone https://github.com/Mr-coldskin7/TOOL-TRUST.git
+cd TOOL-TRUST
+uv sync
+```
+
+`gate` refuses to enforce as `srt-not-installed` with install hints if it is missing.
 
 ---
 
@@ -65,9 +94,7 @@ No reputation scores, no manual security reviews. The first tool you write can a
 
 ## Quick Start
 
-### 1. Install
-
-Requires Python 3.12+, `uv`, Docker, and **`srt`** (the enforcement sandbox for approved contracts):
+## Public Tools
 
 ```bash
 npm install -g @anthropic-ai/sandbox-runtime   # srt CLI (sandbox runtime)
@@ -141,7 +168,13 @@ The skill will generate source, manifest, attestation wrapper, and a smoke test.
 | **Gate** (`gate.py`) | Per-call decision | Cached `verdict=fail` → refuse; runtime `claims` mismatch → refuse. |
 | **Server filter** (`server.py`) | Registration-time filter | Tools with failed attestation are not registered, so the agent cannot even see them. |
 
-We intentionally **do not** wrap every call in a kernel sandbox (bwrap/sandbox-exec). The tool already lives inside the agent's bash runtime; adding per-call kernel isolation is over-engineering for this threat model. Docker isolation is used **only during observation** to discover truth; runtime enforcement relies on the attestation report + gate.
+Runtime enforcement is delegated to **srt** (mature sandbox: seatbelt on macOS,
+bubblewrap on Linux) — approved contracts run inside it on the host, deny =
+out-of-scope. Container + strace is kept ONLY for one-time candidate
+discovery (observe), since non-blocking observation cannot be done by an
+enforcement sandbox. Per-call isolation is therefore real (via srt) but the
+policy language stays ours (claims → contract); we do not hand-roll kernel
+rules.
 
 ### Path whitelist hardening
 
@@ -154,8 +187,10 @@ The `file-write` claim uses a path whitelist. We normalize paths and enforce dir
 ```text
 TOOL-TRUST/
 ├── attest/              # core attestation logic
-│   ├── build.py         # Docker base image (now inline) + tool build
-│   ├── run.py           # run tool in container under strace
+│   ├── build.py         # compile tool inside container (candidate-observation only)
+│   ├── run.py           # container strace trace (candidate-observation only)
+│   ├── live.py          # srt enforcement backend (approved contracts)
+│   ├── contract.py      # claims origin lifecycle (observed-suggested → operator-approved)
 │   ├── parse.py         # parse strace output
 │   ├── rules.py         # syscall → behavior class
 │   ├── reconcile.py     # claims vs observed events
