@@ -17,7 +17,7 @@ import pathlib
 import shutil
 import subprocess
 
-from attest import prereq, provenance, telemetry
+from attest import contract, live, prereq, provenance, telemetry
 
 
 def load_attestation_verdict(tool_dir: pathlib.Path) -> str | None:
@@ -111,7 +111,14 @@ def format_command(manifest: dict, inputs: list[str], tool_dir: pathlib.Path) ->
 
 
 def gated_invoke(manifest: dict, inputs: list[str], tool_dir: pathlib.Path) -> dict:
-    """Invoke a tool through the decision gate (deny → no run, allow → subprocess).
+    """Invoke a tool through the decision gate (deny → no run, allow → execute).
+
+    Execution path depends on contract enforcement status:
+      - claims operator-approved AND manifest declares a non-null enforcement
+        backend config (e.g. `sandbox:
+        {srt_settings: "srt-settings.json"}`) → run inside srt; violations are
+        collected and surfaced (Step 3: live reconciliation)
+      - otherwise → plain subprocess (legacy path; candidates not enforced)
 
     Args:
       manifest: tool.yaml contents.
@@ -119,11 +126,40 @@ def gated_invoke(manifest: dict, inputs: list[str], tool_dir: pathlib.Path) -> d
       tool_dir: cwd for the process.
 
     Returns:
-      Result dict with decision/returncode/stdout/stderr (or deny/launch_error).
+      Result dict with decision/returncode/stdout/stderr (+violations when enforced).
     """
     d = decide(manifest, tool_dir)
     if d["decision"] != "allow":
         return {"tool": manifest["name"], **d, "output": ""}
+
+    # Enforcement path: operator-approved contract → run inside srt
+    sb = manifest.get("sandbox") or {}
+    enforced = contract.can_enforce(manifest.get("claims")) and bool(sb.get("srt_settings"))
+    if enforced:
+        settings = tool_dir / sb["srt_settings"]
+        if not settings.exists():
+            return {"tool": manifest["name"], "decision": "deny",
+                    "reason": "srt-settings-missing",
+                    "detail": f"{settings} missing; operator should review & approve contract",
+                    "output": ""}
+        argv = format_command(manifest, inputs, tool_dir)
+        try:
+            r = live.run_sandboxed(argv, settings, cwd=str(tool_dir))
+        except RuntimeError as exc:  # srt not installed
+            return {"tool": manifest["name"], "decision": "deny",
+                    "reason": "srt-not-installed", "detail": str(exc), "output": ""}
+        out = {
+            "tool": manifest["name"],
+            "decision": "allow",
+            "returncode": r["returncode"],
+            "stdout": r["stdout"].strip(),
+            "stderr": r["stderr"].strip(),
+            "violations": r["violations"],
+        }
+        telemetry.log_run({"event": "invoke", "tool": out["tool"],
+                           "decision": out["decision"], "returncode": out["returncode"],
+                           "violations": out["violations"], "inputs": inputs})
+        return out
 
     argv = format_command(manifest, inputs, tool_dir)
     try:

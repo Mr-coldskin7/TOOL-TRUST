@@ -32,4 +32,6 @@ requires:
 provenance:
   source: local-demo
   version: '1.0'
-  hash: 017889e3341f56b56cd94178baea271f4819b1135ae86bdf820b0d6172682f18
+  hash: f9b1cd724fecdbc08e3c0586344f3a51ec581050ed3e5fd377f3479b92d24fb8
+sandbox:
+  srt_settings: srt-settings.json

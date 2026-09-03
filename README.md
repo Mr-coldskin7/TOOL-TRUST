@@ -67,13 +67,21 @@ No reputation scores, no manual security reviews. The first tool you write can a
 
 ### 1. Install
 
-Requires Python 3.12+, `uv`, and Docker.
+Requires Python 3.12+, `uv`, Docker, and **`srt`** (the enforcement sandbox for approved contracts):
+
+```bash
+npm install -g @anthropic-ai/sandbox-runtime   # srt CLI (sandbox runtime)
+# Linux only: the srt backend needs bubblewrap
+#   apt install bubblewrap   (or: brew install bubblewrap)
+```
 
 ```bash
 git clone https://github.com/Mr-coldskin7/TOOL-TRUST.git
 cd TOOL-TRUST
 uv sync
 ```
+
+`gate` refuses to enforce as `srt-not-installed` with install hints if it is missing.
 
 ### 2. Attest & run a tool locally
 
