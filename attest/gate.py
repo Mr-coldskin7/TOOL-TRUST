@@ -148,9 +148,19 @@ def gated_invoke(manifest: dict, inputs: list[str], tool_dir: pathlib.Path) -> d
         except RuntimeError as exc:  # srt not installed
             return {"tool": manifest["name"], "decision": "deny",
                     "reason": "srt-not-installed", "detail": str(exc), "output": ""}
+        decision = "allow"
+        detail = ""
+        if r["violations"]:
+            # contract breached at runtime → deny (Step 3 live reconcile)
+            decision = "deny"
+            detail = "srt blocked out-of-contract access: " + "; ".join(
+                f"{v['kind']} {v['target']}" + (f":{v['port']}" if v.get("port") else "")
+                for v in r["violations"])
         out = {
             "tool": manifest["name"],
-            "decision": "allow",
+            "decision": decision,
+            "reason": "violation-deny" if decision == "deny" else "attested-allow",
+            "detail": detail,
             "returncode": r["returncode"],
             "stdout": r["stdout"].strip(),
             "stderr": r["stderr"].strip(),

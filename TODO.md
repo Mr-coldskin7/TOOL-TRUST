@@ -24,10 +24,17 @@ must be proven before anything is built on it.
       flagged by Apple; SIP/permissions risk)
 - [ ] **Step 3 — LIVE RECONCILIATION (enforcement layer)**:
       build on Steps 1+2:
-      - `attest/profile.py`: operator-approved claims → seatbelt profile
-      - observer wraps real invocation; violations → deny + telemetry/audit
-      - reuse attest/rules.py + reconcile.py for watch/dual-check paths
-      - claim granularity: hosts/paths/args allowlists
+      - ~~`attest/profile.py`~~ → **deleted 2026-09-03**: custom seatbelt layer dropped,
+        enforcement delegated to **srt** (sandbox-runtime; seatbelt/bwrap)
+      - [x] `attest/live.py`: approved contracts run via `srt -c`, violations parsed
+        from `--debug` stderr; `gate.gated_invoke` routes operator-approved +
+        `sandbox.srt_settings` tools into srt (deny srt-not-installed/srt-settings-missing)
+      - [x] **violation → deny**: runtime breach flips decision to `violation-deny`
+        with detail (live reconcile decision loop closed)
+      - [x] two enforced tools: provenance-demo + cache-tool (both operator-approved,
+        both with srt-settings.json; cache-tool append /tmp verified live)
+      - [ ] claim granularity: hosts/paths/args allowlists as part of the contract
+      - [ ] optionally wrap the whole MCP server in srt (coarse-grained enforcement)
       - closes conditional-evil + self-testimony via enforcement
 
 - [x] Promote `toolhub` to global pi MCP registration (visible from any project, 4 servers)

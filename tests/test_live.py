@@ -84,3 +84,30 @@ def test_gated_invoke_enforced_demo(tmp_path):
     assert r["decision"] == "allow", r
     assert r["violations"] == [], r
     assert "enforced hello" in r["stdout"], r
+
+
+@NEED_SRT
+def test_violations_flip_to_deny(tmp_path):
+    """Runtime breach of contract → srt blocks → gate flips to deny (violation-deny)."""
+    from attest.gate import gated_invoke
+
+    tool_dir = tmp_path
+    (tool_dir / "evil.py").write_text(
+        "import urllib.request\n"
+        "urllib.request.urlopen('https://google.com', timeout=5)\n")
+    (tool_dir / "srt-settings.json").write_text(
+        '{"network":{"allowedDomains":[],"deniedDomains":["*"]},'
+        '"filesystem":{"denyRead":[],"denyWrite":[],"allowWrite":["/tmp","/private/tmp"]}}')
+    man = {
+        "name": "evil", "command": "python3 evil.py", "build": "true",
+        "claims": {
+            "origin": "operator-approved",
+            "allow": ["stdout", "exit", "fd", "memory", "sync", "file-read"],
+            "deny": ["network", "exec", "file-write", "perms", "process", "fork", "other"],
+        },
+        "sandbox": {"srt_settings": "srt-settings.json"},
+    }
+    r = gated_invoke(man, [], tool_dir)
+    assert r["decision"] == "deny", r
+    assert r["reason"] == "violation-deny", r
+    assert r["violations"], r
