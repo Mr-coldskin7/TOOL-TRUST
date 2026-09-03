@@ -17,7 +17,7 @@ jobs:
       - name: Install srt (sandbox-runtime) + bubblewrap
         run: |
           npm install -g @anthropic-ai/sandbox-runtime
-          sudo apt-get update && sudo apt-get install -y bubblewrap
+          sudo apt-get update && sudo apt-get install -y bubblewrap ripgrep socat
       - name: Sync deps (locked)
         run: uv sync --frozen
       - name: Unit & integration tests (no Docker)
@@ -35,7 +35,7 @@ jobs:
       - name: Install srt (sandbox-runtime) + bubblewrap
         run: |
           npm install -g @anthropic-ai/sandbox-runtime
-          sudo apt-get update && sudo apt-get install -y bubblewrap
+          sudo apt-get update && sudo apt-get install -y bubblewrap ripgrep socat
       - name: Sync deps (locked)
         run: uv sync --frozen
       - name: Smoke — server starts & gate allows/denies

@@ -20,7 +20,7 @@ import shlex
 import shutil
 import subprocess
 
-INSTALL_HINT = "npm install -g @anthropic-ai/sandbox-runtime  (and for Linux: brew install bubblewrap / apt install bubblewrap)"
+INSTALL_HINT = "npm install -g @anthropic-ai/sandbox-runtime  (Linux also: apt install bubblewrap ripgrep socat)"
 
 # lines that carry denial context from --debug
 _BLOCKED_RE = re.compile(r"\[SandboxDebug\] Connection blocked to ([^:\s]+)(?::(\d+))?")
