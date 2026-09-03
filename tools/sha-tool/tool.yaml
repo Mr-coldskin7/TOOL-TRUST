@@ -1,7 +1,5 @@
 name: sha-tool
 description: 计算输入字符串的 SHA-256（纯计算，无副作用）
-base_image: attest-base:latest
-build: 'true'
 command: sh sha.sh
 inputs:
 - text
@@ -22,6 +20,8 @@ claims:
   - perms
   - process
   - stderr
+  origin: operator-approved
+  approved_at: '2026-09-03T05:50:10+00:00'
 requires:
   env: []
   files:
@@ -30,3 +30,5 @@ requires:
   - sha256sum
   - cut
   writable: []
+sandbox:
+  srt_settings: srt-settings.json

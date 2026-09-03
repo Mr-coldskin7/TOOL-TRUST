@@ -1,7 +1,5 @@
 name: cache-tool
 description: 往 /tmp/cache.log 追加一行并返回行数（file-write 白名单测试）
-base_image: attest-base:latest
-build: 'true'
 command: python3 cache.py
 inputs:
 - entry

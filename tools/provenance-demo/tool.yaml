@@ -1,7 +1,5 @@
 name: provenance-demo
 description: demo：带 provenance 身份证的工具（hash 校验 / 版本失效）
-base_image: attest-base:latest
-build: 'true'
 command: sh run.sh
 inputs: []
 claims:

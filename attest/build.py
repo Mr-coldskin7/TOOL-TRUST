@@ -73,6 +73,9 @@ def _needs_rebuild(tool_dir: pathlib.Path, build_cmd: str) -> bool:
 def build_tool(manifest: dict, tool_dir: pathlib.Path) -> None:
     """Run manifest's build command inside the container (skips if cached).
 
+    Only compiled tools (manifest declares a real `build:` command) need this;
+    script tools with no build field — or a no-op `build: 'true'` — are skipped.
+
     Args:
       manifest: tool.yaml contents.
       tool_dir: tool directory (mounted at /src).
@@ -80,8 +83,11 @@ def build_tool(manifest: dict, tool_dir: pathlib.Path) -> None:
     Returns:
       None.
     """
+    cmd = manifest.get("build")
+    if not isinstance(cmd, str) or not cmd.strip() or cmd.strip() == "true":
+        return  # script tool: nothing to compile
     ensure_base_image(manifest["base_image"])
-    if not _needs_rebuild(tool_dir, manifest["build"]):
+    if not _needs_rebuild(tool_dir, cmd):
         return
     subprocess.run(
         [
@@ -95,7 +101,7 @@ def build_tool(manifest: dict, tool_dir: pathlib.Path) -> None:
             manifest["base_image"],
             "sh",
             "-c",
-            manifest["build"],
+            cmd,
         ],
         check=True,
     )

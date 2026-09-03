@@ -9,6 +9,7 @@
 """
 import json
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -20,11 +21,22 @@ def _fetch(ticker: str, range_: str, interval: str) -> tuple[list[float], dict]:
     req = urllib.request.Request(
         _ENDPOINT.format(t=ticker, r=range_, i=interval), headers={"User-Agent": UA}
     )
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        data = json.loads(resp.read())
-    res = data["chart"]["result"][0]
-    closes = [c for c in res["indicators"]["quote"][0]["close"] if c is not None]
-    return closes, res.get("meta", {})
+    last: Exception | None = None
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                data = json.loads(resp.read())
+            res = data["chart"]["result"][0]
+            closes = [c for c in res["indicators"]["quote"][0]["close"] if c is not None]
+            return closes, res.get("meta", {})
+        except (urllib.error.URLError, ConnectionError, TimeoutError) as exc:
+            last = exc
+        except json.JSONDecodeError as exc:
+            last = exc
+        except (KeyError, IndexError, TypeError) as exc:  # empty/unknown body
+            last = exc
+        time.sleep(0.6 * (attempt + 1))
+    raise RuntimeError(f"Yahoo chart fetch failed after 3 attempts: {last!r}") from last
 
 
 def _ma(closes: list[float], n: int) -> float | None:

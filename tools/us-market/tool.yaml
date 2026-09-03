@@ -1,7 +1,5 @@
 name: us-market
 description: 美股技术面快照（Yahoo OHLCV）：MA20/50/200、30/60日区间位置%、14日动能、52周位置
-base_image: attest-base:latest
-build: 'true'
 command: python3 market.py
 inputs:
 - ticker
@@ -26,6 +24,10 @@ claims:
   - perms
   - process
   - stderr
+  origin: operator-approved
+  approved_at: '2026-09-03T05:50:11+00:00'
 requires:
   exec:
   - python3
+sandbox:
+  srt_settings: srt-settings.json

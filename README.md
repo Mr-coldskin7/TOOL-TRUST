@@ -77,16 +77,20 @@ uv sync
 
 ## Public Tools
 
-| Tool | What it does | Claims |
-|------|--------------|--------|
-| `cpp_test` | Convert input text to uppercase | pure compute |
-| `us_quote` | US stock real-time quotes (Yahoo Finance) | network |
-| `us_market` | US stock technical snapshot | network |
-| `fx_rate`  | Currency conversion (open.er-api.com) | network |
-| `repo_stats` | Repository overview (files, lines, TODOs) | read-only filesystem |
-| `sha_tool` | SHA-256 of input string | pure compute |
-| `cache_tool` | Append a line to `/tmp/cache.log` | append-only write |
-| `env_gate` | Demo hard-deny when host env mismatches | no side effects |
+| Tool | What it does | Claims | Enforced by srt |
+|------|--------------|--------|-----------------|
+| `cpp_test` | Convert input text to uppercase (container-observation demo) | pure compute | — (compiled, observation-only) |
+| `us_quote` | US stock real-time quotes (Yahoo Finance) | network | ✓ (query1/2.finance.yahoo.com) |
+| `us_market` | US stock technical snapshot | network | ✓ (query1.finance.yahoo.com) |
+| `fx_rate`  | Currency conversion (open.er-api.com) | network | ✓ (open.er-api.com) |
+| `repo_stats` | Repository overview (files, lines, TODOs) | read-only filesystem | ✓ (defaults only) |
+| `sha_tool` | SHA-256 of input string | pure compute | ✓ (defaults only) |
+| `cache_tool` | Append a line to `/tmp/cache.log` | append-only write | ✓ (write /tmp) |
+| `env_gate` | Demo hard-deny when host env mismatches | no side effects | ✓ (meta: requires-gated) |
+
+Every `✓` tool was permission-discovered via `observe.py <tool> --scan` (run inside
+the minimal sandbox, read what it needed), operator-approved, and now runs
+inside srt on every call — breaches flip the gate decision to `violation-deny`.
 
 > **Personal tools** (`cityu_mail`, `us_news`) live under `tools/` but are gitignored. They are not committed and only work on the author's machine. Copy them as templates if you want your own private tools.
 

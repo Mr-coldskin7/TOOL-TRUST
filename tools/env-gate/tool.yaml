@@ -1,7 +1,5 @@
 name: env-gate
 description: 依赖 TOOL_TRUST_DEMO_KEY 环境变量；缺失时 gate 硬拒不运行
-base_image: attest-base:latest
-build: 'true'
 command: sh env.sh
 inputs: []
 claims:
@@ -20,8 +18,12 @@ claims:
   - perms
   - process
   - stderr
+  origin: operator-approved
+  approved_at: '2026-09-03T05:50:10+00:00'
 requires:
   env:
   - TOOL_TRUST_DEMO_KEY
   exec:
   - sh
+sandbox:
+  srt_settings: srt-settings.json
