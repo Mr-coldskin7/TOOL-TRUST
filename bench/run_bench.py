@@ -16,13 +16,13 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from attest import parse, prereq, reconcile, report, rules
 from bench import corpus, fuzz
 from bench.metrics import CaseResult, compute, render, to_dict
-from observe import _drop_launch_execve, annotate
+from attest.annotate import annotate, drop_launch_execve
 
 
 def run_case(c: corpus.Case) -> CaseResult:
     """单 case 全管道:与 observe.observe() 一致的代码路径(仅注入 resolver)。"""
     events = parse.parse_strace(c.text)
-    events = _drop_launch_execve(events)
+    events = drop_launch_execve(events)
     annotate(events)
     hosts = c.hosts_map or {}
     resolver = lambda hs: {ip for h in hs for ip in hosts.get(h, set())}
@@ -42,7 +42,7 @@ def run_requires_cases() -> dict:
     out = {}
     for r in corpus.REQUIRES_CASES:
         events = parse.parse_strace(r.text)
-        events = _drop_launch_execve(events)
+        events = drop_launch_execve(events)
         annotate(events)
         inferred = prereq.infer_requires(events)
         ifiles, iexec = set(inferred["files"]), set(inferred["exec"])

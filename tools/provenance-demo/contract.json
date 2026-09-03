@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "tool": "provenance-demo",
+  "verdict": "pass",
+  "claims": {
+    "allow": [
+      "exit",
+      "fd",
+      "file-read",
+      "memory",
+      "stdout",
+      "sync"
+    ],
+    "deny": [
+      "exec",
+      "file-write",
+      "fork",
+      "network",
+      "other",
+      "perms",
+      "process",
+      "stderr"
+    ],
+    "origin": "operator-approved",
+    "approved_at": "2026-09-02T08:28:09+00:00",
+    "approved_by": "operator"
+  },
+  "sandbox": {
+    "srt_settings": "srt-settings.json"
+  },
+  "provenance": {
+    "version": "1.0",
+    "hash": "f9b1cd724fecdbc08e3c0586344f3a51ec581050ed3e5fd377f3479b92d24fb8"
+  },
+  "approved_by": "operator",
+  "approved_at": "2026-09-02T08:28:09+00:00"
+}

@@ -133,8 +133,8 @@ def render(results: list[CaseResult], requires: dict | None = None) -> str:
     lines.append("  1. claims 是行为采样画像,不是能力上界:conditional-evil 证明过")
     lines.append("  2. file-read 无路径白名单(读 /tmp 与读 /etc/shadow 同权)")
     lines.append("  3. 网络豁免偏宽:DNS(53)/127.x 全部放行,hosts 白名单才是主防线")
-    lines.append("  4. bench 测对账引擎的判定精度,不测 Docker 隔离/运行时 gate 的 subprocess")
-    lines.append("  5. 合成语料 ≠ 真实 strace:真实轨迹回放(dogfood)是后续工作")
+    lines.append("  4. bench 测对账/分类引擎的判定精度,不测 srt 强制本身")
+    lines.append("  5. 合成语料 ≠ 真实轨迹:srt 实际调用(scan / violation-deny)是现场证据")
     return "\n".join(lines)
 
 

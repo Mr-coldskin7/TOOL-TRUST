@@ -20,28 +20,29 @@ import subprocess
 from attest import contract, live, prereq, provenance, telemetry
 
 
+def _read_snapshot(tool_dir: pathlib.Path) -> dict | None:
+    """Read the committed contract snapshot (contract.json), falling back to a
+    legacy cached report (report.json). None if missing/corrupt."""
+    for name in ("contract.json", "report.json"):
+        p = tool_dir / name
+        if p.exists():
+            try:
+                return json.loads(p.read_text())
+            except (json.JSONDecodeError, OSError):
+                continue
+    return None
+
+
 def load_attestation_verdict(tool_dir: pathlib.Path) -> str | None:
-    """Read cached report verdict; None if missing/corrupt (no interception)."""
-    p = tool_dir / "report.json"
-    if not p.exists():
-        return None
-    try:
-        report = json.loads(p.read_text())
-    except (json.JSONDecodeError, OSError):
-        return None
-    v = report.get("verdict")
+    """Read verdict from the contract snapshot; None if missing/corrupt."""
+    snap = _read_snapshot(tool_dir)
+    v = (snap or {}).get("verdict")
     return v if v in ("pass", "fail") else None
 
 
 def load_report(tool_dir: pathlib.Path) -> dict | None:
-    """Read full cached report (None if missing/corrupt). Used by gate 3."""
-    p = tool_dir / "report.json"
-    if not p.exists():
-        return None
-    try:
-        return json.loads(p.read_text())
-    except (json.JSONDecodeError, OSError):
-        return None
+    """Read the contract snapshot (None if missing/corrupt). Used by gate 3."""
+    return _read_snapshot(tool_dir)
 
 
 def _deny(manifest: dict, reason: str, extra: dict | None = None) -> dict:

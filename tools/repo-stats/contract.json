@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "tool": "repo-stats",
+  "verdict": "pass",
+  "claims": {
+    "allow": [
+      "exit",
+      "fd",
+      "file-read",
+      "memory",
+      "stdout",
+      "sync"
+    ],
+    "deny": [
+      "exec",
+      "file-write",
+      "fork",
+      "network",
+      "other",
+      "perms",
+      "process",
+      "stderr"
+    ],
+    "origin": "operator-approved",
+    "approved_at": "2026-09-03T05:50:10+00:00",
+    "approved_by": "operator"
+  },
+  "sandbox": {
+    "srt_settings": "srt-settings.json"
+  },
+  "provenance": {
+    "version": null,
+    "hash": "2a4652e0f32c49ad74df11c818e9c4d3909bcfd92acb66da01475c3a59531159"
+  },
+  "approved_by": "operator",
+  "approved_at": "2026-09-03T05:50:10+00:00"
+}

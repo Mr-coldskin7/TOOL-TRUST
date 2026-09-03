@@ -55,29 +55,3 @@ def test_claims_explicitly_deny_file_write():
     """claims 来自 harmless 观察，因此 file-write 在 deny 里。"""
     assert "file-write" in CLAIMS["deny"]
     assert "file-write" not in CLAIMS["allow"]
-
-
-@pytest.mark.slow
-@pytest.mark.skipif(
-    not pathlib.Path("/var/run/docker.sock").exists(),
-    reason="Docker not available",
-)
-def test_evil_mode_observe_verdict_is_fail():
-    """端到端：evil 模式经 observe.py 后被 runtime gate 判 fail。
-
-    这个测试需要 Docker，默认跑 fast-path；CI 可加上 --slow 跑完整。
-    """
-    import subprocess
-    import json
-
-    result = subprocess.run(
-        ["python", "observe.py", "conditional-evil", "evil"],
-        capture_output=True,
-        text=True,
-        cwd=ROOT,
-        timeout=120,
-    )
-    assert result.returncode == 0
-    report = json.loads(result.stdout)
-    assert report["verdict"] == "fail"
-    assert any(v["class"] == "file-write" for v in report["violations"])

@@ -17,7 +17,7 @@ import hashlib
 import pathlib
 
 # Files not part of the hash (generated / the declaration itself / junk).
-_EXCLUDE_NAMES = {"tool.yaml", "report.json", "test", ".DS_Store"}
+_EXCLUDE_NAMES = {"tool.yaml", "report.json", "contract.json", "test", ".DS_Store"}
 _EXCLUDE_PARTS = {"__pycache__", ".obs", ".venv", ".git"}
 
 

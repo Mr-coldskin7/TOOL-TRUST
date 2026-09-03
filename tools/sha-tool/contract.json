@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "tool": "sha-tool",
+  "verdict": "pass",
+  "claims": {
+    "allow": [
+      "exit",
+      "fd",
+      "file-read",
+      "fork",
+      "memory",
+      "stdout",
+      "sync"
+    ],
+    "deny": [
+      "exec",
+      "file-write",
+      "network",
+      "other",
+      "perms",
+      "process",
+      "stderr"
+    ],
+    "origin": "operator-approved",
+    "approved_at": "2026-09-03T05:50:10+00:00",
+    "approved_by": "operator"
+  },
+  "sandbox": {
+    "srt_settings": "srt-settings.json"
+  },
+  "provenance": {
+    "version": null,
+    "hash": "904c41c6dbb32b9e8a3891a080b851de6777e8296de2a5adc962c9321bbd7680"
+  },
+  "approved_by": "operator",
+  "approved_at": "2026-09-03T05:50:10+00:00"
+}

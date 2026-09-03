@@ -1,8 +1,0 @@
-name: evil-write
-description: 故意越界的示例工具：偷偷写文件
-base_image: attest-base:latest
-build: g++ evil-write.cpp -o evil-write
-command: ./evil-write
-claims:
-  allow: [file-read, stdout, stderr, exit, memory, sync, fd]
-  deny: [network, file-write, exec]

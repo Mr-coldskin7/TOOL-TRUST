@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "tool": "us-market",
+  "verdict": "pass",
+  "claims": {
+    "allow": [
+      "exit",
+      "fd",
+      "file-read",
+      "memory",
+      {
+        "class": "network",
+        "hosts": [
+          "query1.finance.yahoo.com",
+          "query2.finance.yahoo.com"
+        ]
+      },
+      "stdout",
+      "sync"
+    ],
+    "deny": [
+      "exec",
+      "file-write",
+      "other",
+      "perms",
+      "process",
+      "stderr"
+    ],
+    "origin": "operator-approved",
+    "approved_at": "2026-09-03T05:50:11+00:00",
+    "approved_by": "operator"
+  },
+  "sandbox": {
+    "srt_settings": "srt-settings.json"
+  },
+  "provenance": {
+    "version": null,
+    "hash": "68b09a64b4cb9ff1aa219fe212ac73444eb0841b8d80334faff672b9628c08b7"
+  },
+  "approved_by": "operator",
+  "approved_at": "2026-09-03T05:50:11+00:00"
+}

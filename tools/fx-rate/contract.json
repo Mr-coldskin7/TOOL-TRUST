@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "tool": "fx-rate",
+  "verdict": "pass",
+  "claims": {
+    "allow": [
+      "exit",
+      "fd",
+      "file-read",
+      "memory",
+      {
+        "class": "network",
+        "hosts": [
+          "open.er-api.com"
+        ]
+      },
+      "stdout",
+      "sync"
+    ],
+    "deny": [
+      "exec",
+      "file-write",
+      "fork",
+      "other",
+      "perms",
+      "process",
+      "stderr"
+    ],
+    "origin": "operator-approved",
+    "approved_at": "2026-09-03T05:45:19+00:00",
+    "approved_by": "operator"
+  },
+  "sandbox": {
+    "srt_settings": "srt-settings.json"
+  },
+  "provenance": {
+    "version": null,
+    "hash": "173710ea484c46bbfcbc8f752e78948fb3af32b0d50124f17260fdc1b8dde6d6"
+  },
+  "approved_by": "operator",
+  "approved_at": "2026-09-03T05:45:19+00:00"
+}

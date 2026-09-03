@@ -56,9 +56,10 @@ must be proven before anything is built on it.
 ## Mid term (supply-chain trust layer · attack-vector mapped)
 
 - [x] **CI/CD pipeline**: GitHub Actions on every push/PR — pytest + usability
-      (server/gate smoke) + Docker observe e2e + 522-case bench metrics gate
-      (≥0.95, artifact). CI done 2026-09-02; CD (plugin-store distribution) parked
-      until provenance + versioning mature
+      (server/gate/enforce smoke) + 522-case bench metrics gate (≥0.95, artifact).
+      The old Docker observe e2e job was removed 2026-09-03: discovery moved fully
+      into srt (observe --scan); CI still installs srt so enforced runs are verified
+      in CI. CD parked until provenance + versioning mature
 
 - [ ] **First-connect human review** for unknown-source tools (browser / unknown-CA
       model) — Tool Misuse mitigation

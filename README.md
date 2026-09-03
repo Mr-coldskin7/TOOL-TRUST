@@ -1,6 +1,6 @@
 # tool-trust
 
-**Attested MCP Tool Hub.** Turn everyday scripts into trustworthy, self-declaring MCP tools. Each tool ships with a machine-readable behavioral attestation report produced inside a Docker sandbox.
+**Attested MCP Tool Hub.** Turn everyday scripts into trustworthy, self-declaring MCP tools. Each tool ships with a machine-readable behavioral contract — permissions discovered by running it inside sandbox-runtime (`srt`), then enforced on every call by that same sandbox.
 
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](tests/)
 [![CI](https://github.com/Mr-coldskin7/TOOL-TRUST/actions/workflows/ci.yml/badge.svg)](https://github.com/Mr-coldskin7/TOOL-TRUST/actions/workflows/ci.yml)
@@ -11,30 +11,32 @@
 
 LLM agents increasingly call command-line tools on your behalf. But a tool's README rarely matches what it actually does. `tool-trust` closes that gap:
 
-1. **Observe** the tool once inside a minimal Docker container with `strace`.
-2. **Reconcile** observed syscalls against the tool's manifest (`tool.yaml`).
-3. **Decide** at runtime: pass only if the attestation is clean and the current host meets its declared prerequisites.
+1. **Discover** the tool's permissions by running it once inside the minimal `srt` sandbox and reading what it needed (blocked hosts, denied paths).
+2. **Legislate** — an operator reviews the evidence and approves a contract (`operator-approved`).
+3. **Enforce** every runtime call inside `srt`: any breach flips the gate to `violation-deny`.
 4. **Expose** the tool through a standard MCP server so any MCP-capable client (pi, Claude Code, etc.) can use it.
 
-No reputation scores, no manual security reviews. The first tool you write can already produce its first attestation report.
+No reputation scores, no manual security reviews. The first tool you write can already produce its first enforceable contract.
 
 ---
 
 ## How It Works
 
-Two phases, two backends:
+Everything runs inside `srt` — discovery and enforcement use the same sandbox:
 
 ```
-┌─────────────┐   container + strace   ┌──────────────────┐
-│  tool.py    │ ───────────────────────► │ candidate claims │   observe.py: ONE-TIME
-│  tool.yaml  │   observe.py            │  (observed-       │   discovery (suggests,
-└─────────────┘                         │   suggested)      │   never defines boundaries)
-                                        └────────┬─────────┘
+┌─────────────┐   srt --scan (minimal    ┌──────────────────┐
+│  tool.py    │ ───────────────────────► │ suggested access  │  observe.py --scan:
+│  tool.yaml  │   sandbox, read denials) │  (blocked hosts /  │  ONE-TIME permission
+└─────────────┘                         │   denied paths)    │  discovery (evidence,
+                                        └────────┬─────────┘   never legislation)
                                                  │  operator --approve (legislation)
                                                  ▼
                                         ┌──────────────────┐
                                         │  contract         │
                                         │  operator-approved│
+                                        │  (contract.json   │
+                                        │   committed)      │
                                         └────────┬─────────┘
                                                  │
                         ┌────────────────────────┼─────────────────────────┐
@@ -43,21 +45,22 @@ Two phases, two backends:
                 │  srt (exec)  │        │  gate.py     │         │  server.py         │
                 │ enforces each │        │ requires +   │         │ registers only     │
                 │ call: deny =  │        │ provenance + │         │ contracts that     │
-                │ out-of-scope │        │ verdict      │         │ passed attestation │
-                └──────────────┘        └──────────────┘         └────────────────────┘
+                │ violation-deny│        │ verdict      │         │ are operator-      │
+                └──────────────┘        └──────────────┘         │ approved           │
+                                                                    └────────────────────┘
 ```
 
-- **`observe.py`** — one-time candidate discovery in a container (suggests, never defines boundaries).
-- **`--approve`** — the operator legislates; only `operator-approved` claims may be enforced.
-- **`srt`** — enforces every approved call (seatbelt/bubblewrap); violations → report/audit.
+- **`observe.py --scan`** — one-time permission discovery inside the minimal srt sandbox (evidence, never legislation).
+- **`--approve`** — the operator legislates; commits `contract.json`; only `operator-approved` contracts are enforced.
+- **`srt`** — enforces every approved call (seatbelt/bubblewrap); breaches → `violation-deny` + audit.
 - **`gate.py`** — bouncer: verdict / requires / provenance gates, then hands approved contracts to srt.
-- **`server.py`** — stdio MCP server; registers tools whose contracts passed.
+- **`server.py`** — stdio MCP server; registers tools whose contracts are operator-approved.
 
 ---
 
 ### 1. Install
 
-Requires Python 3.12+, `uv`, Docker (one-time candidate observation), and `srt` (enforcement):
+Requires Python 3.12+, `uv`, and **`srt`** (sandbox-runtime — discovery AND enforcement):
 
 ```bash
 npm install -g @anthropic-ai/sandbox-runtime   # srt CLI (sandbox runtime)
@@ -79,7 +82,6 @@ uv sync
 
 | Tool | What it does | Claims | Enforced by srt |
 |------|--------------|--------|-----------------|
-| `cpp_test` | Convert input text to uppercase (container-observation demo) | pure compute | — (compiled, observation-only) |
 | `us_quote` | US stock real-time quotes (Yahoo Finance) | network | ✓ (query1/2.finance.yahoo.com) |
 | `us_market` | US stock technical snapshot | network | ✓ (query1.finance.yahoo.com) |
 | `fx_rate`  | Currency conversion (open.er-api.com) | network | ✓ (open.er-api.com) |
@@ -117,13 +119,17 @@ uv sync
 ### 2. Attest & run a tool locally
 
 ```bash
-# Generate claims from a clean run
-uv run python observe.py cpp-test --generate-claims hello
+# Discover what a tool needs (permission evidence from the minimal sandbox)
+uv run python observe.py fx-rate --scan USD CNY 1
+# -> needs 1 permission: allowedDomains [open.er-api.com]
 
-# Verify a later run still matches the claims
-uv run python observe.py cpp-test hello | jq .verdict
-# "pass"
+# Write the reviewed srt-settings.json, then legislate:
+uv run python observe.py fx-rate --approve --yes
+# -> origin=operator-approved + committed contract.json (gate snapshot)
 ```
+
+Every call now runs enforced inside `srt` — out-of-contract access flips the
+gate to `violation-deny`.
 
 ### 3. Run the MCP server
 
@@ -190,20 +196,20 @@ The `file-write` claim uses a path whitelist. We normalize paths and enforce dir
 
 ```text
 TOOL-TRUST/
-├── attest/              # core attestation logic
-│   ├── build.py         # compile tool inside container (candidate-observation only)
-│   ├── run.py           # container strace trace (candidate-observation only)
-│   ├── live.py          # srt enforcement backend (approved contracts)
-│   ├── contract.py      # claims origin lifecycle (observed-suggested → operator-approved)
-│   ├── parse.py         # parse strace output
+├── attest/              # core logic
+│   ├── live.py          # srt backend: sandboxed execution + violation parse
+│   ├── scan.py          # permission discovery (run in minimal sandbox → needs)
+│   ├── contract.py      # claims origin lifecycle (author-built → operator-approved)
 │   ├── rules.py         # syscall → behavior class
 │   ├── reconcile.py     # claims vs observed events
-│   ├── prereq.py        # requires inference & hard check
+│   ├── prereq.py        # requires hard check
+│   ├── parse.py         # event parsing (inference)
+│   ├── provenance.py    # source hash / version identity
 │   ├── gate.py          # decision gate + runtime invocation
-│   └── report.py        # JSON report builder
-├── observe.py           # one-shot attestation CLI
+│   └── report.py        # contract/report builder
+├── observe.py           # srt-native CLI: --scan / --approve / --check-requires
 ├── server.py            # stdio MCP server
-├── tools/               # registered tools
+├── tools/               # registered tools (each: tool.yaml + contract.json + srt-settings.json)
 │   ├── us-quote/
 │   ├── us-market/
 │   ├── fx-rate/
@@ -213,7 +219,7 @@ TOOL-TRUST/
 │   ├── env_gate/
 │   ├── cpp-test/
 │   └── conditional-evil/   # boundary fixture, not registered
-├── bench/               # synthetic corpus + metrics (no Docker needed)
+├── bench/               # synthetic corpus + metrics (no srt needed)
 ├── tests/               # pytest suite
 └── .claude/skills/register-tool/  # skill for adding tools
 ```
@@ -242,7 +248,7 @@ Current baseline: **522 cases, precision=recall=F1=accuracy=1.000** (22 handwrit
 
 Why the fuzz corpus is not a self-fulfilling prophecy: `bench/fuzz.py` generates random cases from an **intent model** — claims derive from the *declared* side, strace text from the *behavior* side, and the ground-truth label from an intent-level comparison that shares no code with the event-level reconciliation pipeline. Building it surfaced two real engine defects that the 22 hand cases missed (a root-path whitelist boundary bug and an fd-class correlation error in the generator), which were fixed with regression tests.
 
-The bench measures the **reconciliation engine only** — not Docker isolation, not the subprocess-launch internals of the runtime gate, and not tool-source malice (a single observed run is a sample, `conditional-evil` proves the gap). These boundaries are printed in every report alongside the metrics.
+The bench measures the **reconciliation engine only** — not srt enforcement, not the subprocess-launch internals of the runtime gate, and not tool-source malice (a single sandboxed smoke is a sample, `conditional-evil` proves the gap). These boundaries are printed in every report alongside the metrics.
 
 Run a tool directly without MCP:
 
@@ -262,14 +268,14 @@ cat tools/<name>/report.json | jq
 
 Detailed, regularly-updated work list: **[TODO.md](TODO.md)**.
 
-- [x] Attestation pipeline: Docker sandbox + strace → JSON report
+- [x] Attested pipeline: srt permission discovery (scan) → operator-approved contract → enforced execution
 - [x] Structured claims: `file-write` with `mode` + `paths` whitelist
 - [x] `requires` pre-flight: auto-inference + hard check
 - [x] Decision gate + server-side registration filter
-- [x] C++/Python tools end-to-end
-- [x] Network tools with `hosts` whitelist + resolver injection
+- [x] Script tools end-to-end (python/sh)
+- [x] Network tools with `hosts` allowlist (scan-discovered allowedDomains)
 - [x] Path traversal hardening (`..` bypass fixed)
-- [x] Boundary fixtures (`evil-write`, `conditional-evil`) to stress-test gate
+- [x] Boundary fixture (`conditional-evil`) to stress-test gate
 - [ ] Full manifest-driven registration: add a tool by only editing `tool.yaml`
 - [ ] `toolhub` health scan: detect stale/failed attestation reports
 - [x] **Tool provenance (supply-chain trust)**: `source`/`version`/`hash` in manifest; tampered source → gate deny; version bump → attestation invalidates (SCA-style)
@@ -285,9 +291,9 @@ tool-trust exists because AI agents trust too much. Modern attacks on agents
 Attacks) all exploit some **unconditional trust** — the model trusts text,
 tools, plans, identities, and code execution. We take exactly one of those
 points (tool behavior) out of the cloud and replace trust with **verifiable
-fact**: a Docker sandbox observes what a tool actually does, and a
-deterministic reconciliation engine compares it against what the tool
-declared.
+fact**: the sandbox-runtime tells us what a tool actually needs (blocked
+hosts/denied paths from a minimal-sandbox smoke), and a deterministic
+gate enforces exactly that on every call.
 
 That framing decides the next three directions:
 
