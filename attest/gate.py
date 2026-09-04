@@ -164,7 +164,9 @@ def gated_invoke(manifest: dict, inputs: list[str], tool_dir: pathlib.Path) -> d
         decision = "allow"
         detail = ""
         if r["violations"]:
-            # contract breached at runtime → deny (Step 3 live reconcile)
+            # contract breached at runtime → deny. These violations are srt's own
+            # denial events (attest/live.py violation_events), NOT a syscall
+            # reconcile — srt is both enforcer and observer at runtime.
             decision = "deny"
             detail = "srt blocked out-of-contract access: " + "; ".join(
                 f"{v['kind']} {v['target']}" + (f":{v['port']}" if v.get("port") else "")

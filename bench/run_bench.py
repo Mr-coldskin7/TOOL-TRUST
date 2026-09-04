@@ -16,7 +16,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from attest import parse, prereq, reconcile, report, rules
 from bench import corpus, fuzz
 from bench.metrics import CaseResult, compute, render, to_dict
-from attest.annotate import annotate, drop_launch_execve
+from bench.annotate import annotate, drop_launch_execve
 
 
 def run_case(c: corpus.Case) -> CaseResult:

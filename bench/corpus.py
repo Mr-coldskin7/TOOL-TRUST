@@ -8,6 +8,13 @@
   - claims 分两类:诚实工具(声明覆盖自身行为,恶意行为会越界) /
     撒谎工具(声明故意漏掉真实能力,行为直接被 not-claimed 抓)。
   - hosts_map 注入 resolver,保证网络对账在无 DNS 环境下同样确定。
+
+为什么坚持手写合成语料(而不是从 srt 真实运行采样):
+  这是系统里唯一不经过任何观测仪器的独立标尺。srt 化之后,生产上
+  enforcement 与 observation 已合并——沙箱既拦报也产出"拦了什么"这份证据。
+  若 bench 输入与期望都来自 srt 自身的观察,srt 的漏报会原样变成 bench 的
+  "期望",测试永远绿,审查退化为自证。手写 ground truth 保证仪器可以被
+  证伪。参见 bench/annotate.py(标注层,strace 时代遗产,仅供 bench)的 STATUS 注释。
 """
 
 from dataclasses import dataclass, field

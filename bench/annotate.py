@@ -1,6 +1,16 @@
 """Event annotation: add behavior class (and path/mode for writes, ip/port for nets).
 
-Consumed by bench (synthetic corpus) — real tool events
+STATUS: strace-era classification layer. NOT used by any production path.
+  - live enforcement gets violations from srt --debug denial events
+    (attest/live.py violation_events) — no syscall parsing at runtime;
+  - permission discovery is denial-based (attest/scan.py), not classify-based.
+Only caller: bench/run_bench.py (synthetic corpus).
+
+Why it stays: the corpus feeds it hand-written events, so it is graded against
+ground truth that no instrument produced. An instrument cannot grade itself —
+if bench input ever comes from srt's own observation, srt's blind spots become
+the benchmark's blind spots. Deleting this module means losing the system's
+only ruler independent of the sandbox.
 """
 from attest import rules
 
