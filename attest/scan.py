@@ -22,6 +22,9 @@ from attest import live
 #   - no network
 #   - no extra writes beyond the scratch dirs every tool gets
 #   - no reads restricted (reads default allowed inside srt)
+# NOTE platform difference: glob patterns (**/.git/**, **/.env) are honored on
+# macOS seatbelt but IGNORED on Linux (bwrap). If you run on Linux/CI, list the
+# concrete deny paths explicitly for the same protection.
 MIN_SETTINGS = {
     "network": {"allowedDomains": [], "deniedDomains": ["*"]},
     "filesystem": {

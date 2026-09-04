@@ -72,7 +72,6 @@ def approve_tool(tool: str, yes: bool = False) -> None:
     with claims, sandbox settings reference, provenance (hash/version) and
     approval metadata. Gate 1 (verdict) + Gate 3 (provenance) read this file.
     """
-    from attest.gate import format_command  # noqa: F401  (unused here)
     from attest.provenance import compute_tool_hash
 
     tool_dir = TOOLS_DIR / tool

@@ -1,7 +1,6 @@
 """Event annotation: add behavior class (and path/mode for writes, ip/port for nets).
 
-Container/strace-free. Consumed by bench (synthetic corpus) — real tool events
-today come straight from srt violation reporting, not raw syscall traces.
+Consumed by bench (synthetic corpus) — real tool events
 """
 from attest import rules
 

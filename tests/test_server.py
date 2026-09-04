@@ -30,7 +30,7 @@ def test_load_tools_registers_each_tool(tmp_path):
 def test_load_tools_skips_fail_attestation(tmp_path):
     _write_toolpy(tmp_path / "tools" / "good", "good_tool")
     _write_toolpy(tmp_path / "tools" / "bad", "bad_tool")
-    (tmp_path / "tools" / "bad" / "report.json").write_text('{"verdict": "fail"}')
+    (tmp_path / "tools" / "bad" / "contract.json").write_text('{"verdict": "fail"}')
     sys.path.insert(0, str(tmp_path))
     try:
         mcp = FastMCP("test")
@@ -42,7 +42,7 @@ def test_load_tools_skips_fail_attestation(tmp_path):
 
 def test_load_tools_registers_pass_attestation(tmp_path):
     _write_toolpy(tmp_path / "tools" / "t", "t")
-    (tmp_path / "tools" / "t" / "report.json").write_text('{"verdict": "pass"}')
+    (tmp_path / "tools" / "t" / "contract.json").write_text('{"verdict": "pass"}')
     sys.path.insert(0, str(tmp_path))
     try:
         mcp = FastMCP("test")

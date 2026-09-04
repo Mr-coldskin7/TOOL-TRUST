@@ -173,18 +173,21 @@ The skill will generate source, manifest, attestation wrapper, and a smoke test.
 
 | Layer | Role | Key Point |
 |-------|------|-----------|
-| **Attestation** (`observe.py`) | One-time behavioral sample | Produces a report, not a proof of innocence. |
+| **Discovery** (`observe.py --scan`) | One-time permission evidence run in the minimal srt sandbox | Evidence (blocked hosts/denied paths), never legislation. |
+| **Contract** (`contract.json`) | Committed gate snapshot | Claims + sandbox + provenance hash/version approved by the operator; source change without re-approval → `tampered`. |
 | **Requires** (`prereq.py`) | Pre-flight hard check | `exec`, `files`, `env`, `writable` must all be present; otherwise the call is refused before it starts. |
-| **Gate** (`gate.py`) | Per-call decision | Cached `verdict=fail` → refuse; runtime `claims` mismatch → refuse. |
-| **Server filter** (`server.py`) | Registration-time filter | Tools with failed attestation are not registered, so the agent cannot even see them. |
+| **Gate** (`gate.py`) | Per-call decision | `attestation-fail` / `requires` / `provenance` / **contract-mismatch** (manifest claims/sandbox drifted from the approved snapshot → refuse). |
+| **Enforcement** (`srt`) | Per-call isolation | Approved contracts run inside srt on the host; any out-of-contract access → `violation-deny` + audit. |
+| **Server filter** (`server.py`) | Registration-time filter | Tools without a clean contract are not registered, so the agent cannot even see them. |
 
-Runtime enforcement is delegated to **srt** (mature sandbox: seatbelt on macOS,
-bubblewrap on Linux) — approved contracts run inside it on the host, deny =
-out-of-scope. Container + strace is kept ONLY for one-time candidate
-discovery (observe), since non-blocking observation cannot be done by an
-enforcement sandbox. Per-call isolation is therefore real (via srt) but the
-policy language stays ours (claims → contract); we do not hand-roll kernel
-rules.
+Gate 4 (`contract-mismatch`) matters because `tool.yaml` is deliberately not
+part of the source hash: an approved tool silently gaining a new permission in
+its manifest would otherwise go unnoticed. Sandbox settings carry the same
+drift protection.
+
+**Platform note on `srt-settings.json`:** glob patterns in `denyWrite`
+(e.g. `**/.git/**`) are honored on macOS seatbelt but *ignored on Linux*
+(bubblewrap). On Linux/CI, list concrete deny paths for identical protection.
 
 ### Path whitelist hardening
 

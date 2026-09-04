@@ -18,6 +18,16 @@ jobs:
         run: |
           npm install -g @anthropic-ai/sandbox-runtime
           sudo apt-get update && sudo apt-get install -y bubblewrap ripgrep socat
+          # ubuntu-24.04 runner restricts unprivileged userns via apparmor;
+          # bwrap/apply-seccomp cannot create namespaces unless this is off
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || true
+          cat /proc/sys/kernel/unprivileged_userns_clone 2>/dev/null || true
+      - name: Verify srt sandbox works (diagnostic, warn-only)
+        run: |
+          echo '{"network":{"allowedDomains":[],"deniedDomains":["*"]},"filesystem":{"denyRead":[],"denyWrite":[],"allowWrite":["/tmp"]}}' > /tmp/srt-verify.json
+          srt --debug --settings /tmp/srt-verify.json -c "echo srt-ok" 2>&1 | grep -v Skipping | tail -8
+        continue-on-error: true
       - name: Sync deps (locked)
         run: uv sync --frozen
       - name: Unit & integration tests (no Docker)
@@ -36,6 +46,8 @@ jobs:
         run: |
           npm install -g @anthropic-ai/sandbox-runtime
           sudo apt-get update && sudo apt-get install -y bubblewrap ripgrep socat
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || true
       - name: Verify srt can sandbox (diagnostic)
         run: |
           echo '{"network":{"allowedDomains":[],"deniedDomains":["*"]},"filesystem":{"denyRead":[],"denyWrite":[],"allowWrite":["/tmp"]}}' > /tmp/srt-verify.json

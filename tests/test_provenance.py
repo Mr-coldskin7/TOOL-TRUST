@@ -20,6 +20,8 @@ MANIFEST_BASE = {
     "description": "provenance test",
     "build": "true",
     "command": "sh run.sh",
+    "claims": {"origin": "operator-approved", "allow": [], "deny": []},
+    "sandbox": {},
 }
 
 
@@ -40,11 +42,12 @@ def _manifest(version="1.0", with_hash=True, **kw):
 
 
 def _write_report(tool_dir, *, version="1.0", with_prov=True):
-    r = {"tool": "prov-demo", "verdict": "pass", "claims": {}, "observed": {},
-         "violations": []}
+    claims = {"origin": "operator-approved", "allow": [], "deny": []}  # = _manifest() claims
+    r = {"schema": 1, "tool": "prov-demo", "verdict": "pass",
+         "claims": claims, "sandbox": {}, "observed": {}, "violations": []}
     if with_prov:
         r["provenance"] = {"version": version, "hash": "any", "at": "t"}
-    (tool_dir / "report.json").write_text(json.dumps(r))
+    (tool_dir / "contract.json").write_text(json.dumps(r))
 
 
 def test_hash_is_stable_and_directory_scoped(tmp_path):

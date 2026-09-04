@@ -21,15 +21,13 @@ from attest import contract, live, prereq, provenance, telemetry
 
 
 def _read_snapshot(tool_dir: pathlib.Path) -> dict | None:
-    """Read the committed contract snapshot (contract.json), falling back to a
-    legacy cached report (report.json). None if missing/corrupt."""
-    for name in ("contract.json", "report.json"):
-        p = tool_dir / name
-        if p.exists():
-            try:
-                return json.loads(p.read_text())
-            except (json.JSONDecodeError, OSError):
-                continue
+    """Read the committed contract snapshot (contract.json); None if missing."""
+    p = tool_dir / "contract.json"
+    if p.exists():
+        try:
+            return json.loads(p.read_text())
+        except (json.JSONDecodeError, OSError):
+            return None
     return None
 
 
@@ -59,7 +57,7 @@ def decide(manifest: dict, tool_dir: pathlib.Path) -> dict:
 
     Args:
       manifest: tool.yaml contents.
-      tool_dir: tool directory (holds report.json, source files).
+      tool_dir: tool directory (holds contract.json, source files).
 
     Returns:
       {"decision": "allow"|"deny", "reason": ..., "tool": ...}
@@ -93,7 +91,21 @@ def decide(manifest: dict, tool_dir: pathlib.Path) -> dict:
         if version_changed:
             # version changed (code or not) → normal upgrade, old proof expired
             return _deny(manifest, "stale-version", {
-                "detail": f"observed {observed_v!r} -> declared {declared_v!r}; re-observe (--save-report)"})
+                "detail": f"observed {observed_v!r} -> declared {declared_v!r}; re-review & re-approve"})
+
+    # Gate 4: the approved contract must still describe THIS manifest. tool.yaml
+    # is not covered by the source hash, so claims/sandbox drift would otherwise
+    # go unnoticed (e.g. an approved tool silently gaining a new permission).
+    snap = load_report(tool_dir)
+    if snap and snap.get("tool") == manifest["name"]:
+        cur_claims = manifest.get("claims") or {}
+        snap_claims = snap.get("claims") or {}
+        cur_sb = manifest.get("sandbox") or {}
+        snap_sb = snap.get("sandbox") or {}
+        if cur_claims != snap_claims or cur_sb != snap_sb:
+            return _deny(manifest, "contract-mismatch", {
+                "detail": "current manifest claims/sandbox differ from the approved "
+                          "contract snapshot; review & re-approve"})
 
     d = {"decision": "allow", "reason": "ok", "tool": manifest["name"]}
     telemetry.log_run({"event": "decide", **d})
