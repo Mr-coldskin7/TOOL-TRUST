@@ -176,14 +176,20 @@ The skill will generate source, manifest, attestation wrapper, and a smoke test.
 | **Discovery** (`observe.py --scan`) | One-time permission evidence run in the minimal srt sandbox | Evidence (blocked hosts/denied paths), never legislation. |
 | **Contract** (`contract.json`) | Committed gate snapshot | Claims + sandbox + provenance hash/version approved by the operator; source change without re-approval → `tampered`. |
 | **Requires** (`prereq.py`) | Pre-flight hard check | `exec`, `files`, `env`, `writable` must all be present; otherwise the call is refused before it starts. |
-| **Gate** (`gate.py`) | Per-call decision | `attestation-fail` / `requires` / `provenance` / **contract-mismatch** (manifest claims/sandbox drifted from the approved snapshot → refuse). |
+| **Gate** (`gate.py`) | Per-call decision | `attestation-fail` / `requires` / `provenance` / **contract-mismatch** (manifest claims drifted, or `srt-settings.json` content changed — its sha256 is in the committed snapshot → refuse). |
 | **Enforcement** (`srt`) | Per-call isolation | Approved contracts run inside srt on the host; any out-of-contract access → `violation-deny` + audit. |
 | **Server filter** (`server.py`) | Registration-time filter | Tools without a clean contract are not registered, so the agent cannot even see them. |
 
 Gate 4 (`contract-mismatch`) matters because `tool.yaml` is deliberately not
 part of the source hash: an approved tool silently gaining a new permission in
-its manifest would otherwise go unnoticed. Sandbox settings carry the same
-drift protection.
+its manifest would otherwise go unnoticed. `srt-settings.json` is locked too —
+`observe.py --approve` hashes its content into `contract.json`, so any later
+edit (e.g. allowing one more domain) is denied on the next call. Approved
+permissions are exact: what was shown in the y/N summary is what is enforced.
+
+`observe.py --scan` writes `srt-settings.json.proposed` (reviewable), and
+`--approve` shows a human-readable permission summary of exactly what will be
+locked in before asking for confirmation.
 
 **Platform note on `srt-settings.json`:** glob patterns in `denyWrite`
 (e.g. `**/.git/**`) are honored on macOS seatbelt but *ignored on Linux*
