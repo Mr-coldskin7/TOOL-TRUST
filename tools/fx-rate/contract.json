@@ -1,5 +1,5 @@
 {
-  "schema": 1,
+  "schema": 2,
   "tool": "fx-rate",
   "verdict": "pass",
   "claims": {
@@ -31,7 +31,8 @@
     "approved_by": "operator"
   },
   "sandbox": {
-    "srt_settings": "srt-settings.json"
+    "srt_settings": "srt-settings.json",
+    "srt_settings_sha256": "8103824b716af6653479274ff9a0b316625514ad814986ce12967a723a7affb4"
   },
   "provenance": {
     "version": null,

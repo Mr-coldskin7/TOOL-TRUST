@@ -1,5 +1,5 @@
 {
-  "schema": 1,
+  "schema": 2,
   "tool": "provenance-demo",
   "verdict": "pass",
   "claims": {
@@ -26,7 +26,8 @@
     "approved_by": "operator"
   },
   "sandbox": {
-    "srt_settings": "srt-settings.json"
+    "srt_settings": "srt-settings.json",
+    "srt_settings_sha256": "9669212c67e8a6c60d2a6fe631eed591ec000301661e66bfdeb59801e630b84f"
   },
   "provenance": {
     "version": "1.0",

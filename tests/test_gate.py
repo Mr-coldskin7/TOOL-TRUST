@@ -203,3 +203,35 @@ def test_tool_source_tamper_denied_after_approve(tmp_path):
     d = decide(man, tool)
     assert d["decision"] == "deny", d
     assert d["reason"] == "tampered", d
+
+
+def test_contract_mismatch_settings_changed(tmp_path):
+    """批准后改 srt-settings.json(多放行一个域名)→ contract-mismatch 拒绝。"""
+    import json
+    import hashlib
+    from observe import approve_tool
+    import yaml as _yaml
+
+    tool = tmp_path / "mini-tool"
+    tool.mkdir()
+    (tool / "run.sh").write_text("#!/bin/sh\necho hi\n")
+    settings = {"network": {"allowedDomains": ["example.com"], "deniedDomains": []},
+                "filesystem": {"allowWrite": ["/tmp"]}}
+    (tool / "srt-settings.json").write_text(json.dumps(settings))
+    claims = {"origin": "operator-approved", "allow": ["stdout", "exit"], "deny": ["network"]}
+    m = {"name": "mini-tool", "claims": claims, "command": "sh run.sh",
+         "sandbox": {"srt_settings": "srt-settings.json"}}
+    (tool / "tool.yaml").write_text(_yaml.safe_dump(m))
+    monkeypatch_approve: None  # 直接用 approve_tool 真流程
+    import observe as _observe
+    _observe.TOOLS_DIR = tmp_path  # type: ignore[attr-defined]
+    approve_tool("mini-tool", yes=True)
+    # 篡改 settings:多放行一个域名
+    settings2 = dict(settings)
+    settings2["network"] = {"allowedDomains": ["example.com", "evil.io"], "deniedDomains": []}
+    (tool / "srt-settings.json").write_text(json.dumps(settings2))
+    man = _yaml.safe_load((tool / "tool.yaml").read_text())
+    d = decide(man, tool)
+    assert d["decision"] == "deny", d
+    assert d["reason"] == "contract-mismatch", d
+    assert "srt-settings.json" in d.get("detail", ""), d

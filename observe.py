@@ -1,26 +1,35 @@
 """attest observation CLI — srt-native (no Docker, no strace).
 
 Everything happens inside sandbox-runtime:
-  1. `--scan <tool> [inputs...]`  — run the tool in a MINIMAL srt sandbox,
-     read what it needed (blocked hosts / EPERM paths) → suggested settings.
-  2. `--approve`                 — operator legislates: claims origin →
-     operator-approved; writes a committed contract.json (gate snapshot).
+
+  1. `--scan <tool> [input...]`  — run the tool in a MINIMAL srt sandbox, read
+     what it needed (blocked hosts / EPERM paths) → suggested srt-settings
+     written to `srt-settings.json.proposed` (reviewable, diff-able).
+  2. `--approve`                 — operator legislates: prints a human-readable
+     permission summary of exactly what will be allowed, then accepts the
+     proposed settings (or the existing srt-settings.json), commits
+     contract.json with the SETTINGS CONTENT HASHED IN — an approved tool's
+     permissions are locked; any later change flips the gate to
+     contract-mismatch.
   3. `--check-requires`          — pre-flight prerequisites hard check.
 
 Usage:
-  python observe.py <tool> --scan [input...]        # srt permission discovery
-  python observe.py <tool> --approve [--yes]        # legislate + contract snapshot
+  python observe.py <tool> --scan [input...]        # propose permissions
+  python observe.py <tool> --approve [--yes]        # legislate + lock
   python observe.py <tool> --check-requires         # requires pre-flight
 """
 import argparse
+import hashlib
 import json
 import pathlib
+import shutil
 
 import yaml
 
 from attest import contract, prereq, scan as scan_mod
 
 TOOLS_DIR = pathlib.Path("tools")
+PROPOSED_SUFFIX = ".proposed"
 
 
 def load_manifest(tool: str) -> dict:
@@ -30,13 +39,31 @@ def load_manifest(tool: str) -> dict:
         return yaml.safe_load(f)
 
 
-def check_requires(tool: str, inputs: list[str]) -> dict:
-    """Pre-flight hard check of the tool's requires; missing any → fail.
+def _fmt(items) -> str:
+    """Join claim/settings items, tolerating structured (dict) entries."""
+    parts = [it if isinstance(it, str) else json.dumps(it, ensure_ascii=False)
+             for it in (items or [])]
+    return ", ".join(parts) if parts else "(none)"
 
-    Args:
-      tool: tool name.
-      inputs: unused (kept for CLI symmetry).
-    """
+
+def permission_summary(manifest: dict, settings: dict) -> str:
+    """Human-readable summary of exactly what the tool is allowed to do."""
+    lines: list[str] = []
+    net = settings.get("network", {})
+    doms = net.get("allowedDomains") or []
+    lines.append(f"  network domains : {', '.join(doms) if doms else '(none)'}")
+    fs = settings.get("filesystem", {})
+    lines.append("  allowWrite      : " + _fmt(fs.get("allowWrite") or []))
+    lines.append("  denyWrite       : " + _fmt(fs.get("denyWrite") or []))
+    lines.append("  denyRead        : " + _fmt(fs.get("denyRead") or []))
+    c = manifest.get("claims") or {}
+    lines.append(f"  claims allow    : {_fmt(c.get('allow'))}")
+    lines.append(f"  claims deny     : {_fmt(c.get('deny'))}")
+    return "\n".join(lines)
+
+
+def check_requires(tool: str, inputs: list[str]) -> dict:
+    """Pre-flight hard check of the tool's requires; missing any → fail."""
     manifest = load_manifest(tool)
     check = prereq.hard_check(manifest.get("requires"), cwd=str(TOOLS_DIR / tool))
     print(json.dumps(check, ensure_ascii=False, indent=2))
@@ -44,10 +71,10 @@ def check_requires(tool: str, inputs: list[str]) -> dict:
 
 
 def scan_tool(tool: str, inputs: list[str]) -> None:
-    """srt permission discovery: run the tool inside the minimal sandbox.
+    """srt permission discovery: propose what the tool needs.
 
-    Output is a SUGGESTION (evidence from a sandboxed smoke run). The operator
-    reviews it and writes the final srt-settings.json — enforcing is legislative.
+    Evidence (suggested settings) lands at <tool>/srt-settings.json.proposed.
+    Nothing is enabled yet — approval is the legislative step.
     """
     from attest.gate import format_command
 
@@ -56,21 +83,30 @@ def scan_tool(tool: str, inputs: list[str]) -> None:
     argv = format_command(manifest, inputs, tool_dir)
     r = scan_mod.scan(argv, cwd=str(tool_dir))
     print(json.dumps({"tool": tool, **r}, ensure_ascii=False, indent=2))
-    if r["denials"]:
-        print(
-            f"\n>>> {tool} needs {len(r['denials'])} permission(s). Review the suggested"
-            f" settings; write them to {tool_dir / 'srt-settings.json'} to enforce.")
-    else:
-        print(f"\n>>> {tool} needed nothing beyond defaults. ({r['note']})")
+
+    proposed = tool_dir / f"srt-settings.json{PROPOSED_SUFFIX}"
+    proposed.write_text(json.dumps(r["suggested"], indent=2, ensure_ascii=False))
+    print(f"\n>>> suggested permissions written to {proposed}:\n"
+          + permission_summary(manifest, r["suggested"]))
+    print(f"\n    review it — then run:  observe.py {tool} --approve   "
+          "(y/N confirms and LOCKS these permissions)")
+
+
+def _load_settings(tool_dir: pathlib.Path, name: str) -> dict:
+    """Loads the settings file (existing or proposed), promoting proposed on approve."""
+    target = tool_dir / name
+    if target.exists():
+        return json.loads(target.read_text())
+    raise SystemExit(f"{target} missing; run `observe.py --scan` first to propose one")
 
 
 def approve_tool(tool: str, yes: bool = False) -> None:
-    """Operator confirmation: observed-suggested claims → operator-approved.
+    """Operator confirmation: scan evidence → enforceable, LOCKED contract.
 
-    This is the legislative step — only the operator (or an agent acting for
-    them) may call it. Also writes contract.json (committed): the gate snapshot
-    with claims, sandbox settings reference, provenance (hash/version) and
-    approval metadata. Gate 1 (verdict) + Gate 3 (provenance) read this file.
+    Approving accepts the settings (promotes srt-settings.json.proposed if the
+    formal file is absent), shows a human-readable permission summary, and
+    writes contract.json with the settings content hashed in — so any later
+    edit of srt-settings.json flips the gate to contract-mismatch.
     """
     from attest.provenance import compute_tool_hash
 
@@ -79,26 +115,46 @@ def approve_tool(tool: str, yes: bool = False) -> None:
     claims = manifest.get("claims")
     if not claims:
         raise SystemExit(
-            f"no claims to approve; run `observe.py {tool} --scan` first "
-            "(scan evidence ⇒ monkey/clear claims, then approve)")
-    print(f"[contract] reviewing {tool} claims (origin={claims.get('origin') or 'author-built'}):")
-    print(json.dumps(claims, ensure_ascii=False, indent=2))
+            f"no claims to approve; run `observe.py {tool} --scan` first")
+
+    sb = manifest.get("sandbox") or {}
+    sb_name = sb.get("srt_settings")
+    if not sb_name:
+        raise SystemExit(
+            f"no sandbox.srt_settings in {tool}/tool.yaml; run `observe.py {tool} --scan` first")
+    target = tool_dir / sb_name
+    if not target.exists():
+        pp = tool_dir / f"srt-settings.json{PROPOSED_SUFFIX}"
+        if not pp.exists():
+            raise SystemExit(f"nothing to accept: {target} missing and no "
+                             f"srt-settings.json{PROPOSED_SUFFIX} from --scan")
+        shutil.copyfile(pp, target)
+        print(f"[contract] promoting {pp.name} → {target.name}")
+
+    settings = _load_settings(tool_dir, sb_name)
+    print(f"[contract] reviewing {tool} — EXACT permissions to be locked in:\n"
+          + permission_summary(manifest, settings))
     if not yes:
-        if input("Approve as enforceable contract? [y/N] ").strip().lower() not in ("y", "yes"):
+        if input("Approve and LOCK these permissions? [y/N] ").strip().lower() not in ("y", "yes"):
             print("aborted — nothing written")
             return
+
     contract.approve(claims)
     claims["approved_by"] = "operator"
-    # persist manifest changes (origin/approved_*)
-    (tool_dir / "tool.yaml").write_text(yaml.safe_dump(manifest, allow_unicode=True, sort_keys=False))
-    # committed gate snapshot
+    (tool_dir / "tool.yaml").write_text(
+        yaml.safe_dump(manifest, allow_unicode=True, sort_keys=False))
+
+    settings_hash = hashlib.sha256(target.read_bytes()).hexdigest()
     prov = manifest.get("provenance")
     snapshot = {
-        "schema": 1,
+        "schema": 2,
         "tool": tool,
         "verdict": "pass",
         "claims": claims,
-        "sandbox": manifest.get("sandbox") or {},
+        "sandbox": {
+            "srt_settings": sb_name,
+            "srt_settings_sha256": settings_hash,
+        },
         "provenance": {
             "version": prov.get("version") if prov else None,
             "hash": compute_tool_hash(tool_dir),
@@ -106,9 +162,12 @@ def approve_tool(tool: str, yes: bool = False) -> None:
         "approved_by": claims.get("approved_by"),
         "approved_at": claims.get("approved_at"),
     }
-    (tool_dir / "contract.json").write_text(json.dumps(snapshot, ensure_ascii=False, indent=2))
-    print(f"[contract] {tool} claims now operator-approved "
-          f"(written to {tool_dir / 'tool.yaml'} + contract.json)")
+    (tool_dir / "contract.json").write_text(
+        json.dumps(snapshot, ensure_ascii=False, indent=2))
+    (tool_dir / f"srt-settings.json{PROPOSED_SUFFIX}").unlink(missing_ok=True)
+    print(f"[contract] {tool} APPROVED + LOCKED (settings sha256 {settings_hash[:12]}…)\n"
+          f"          {tool_dir / 'contract.json'} written — edit srt-settings.json "
+          "now ⇒ contract-mismatch on next call")
 
 
 def main() -> None:
@@ -117,10 +176,9 @@ def main() -> None:
     ap.add_argument("tool", help="tool name under tools/")
     ap.add_argument("inputs", nargs="*", default=[])
     ap.add_argument("--scan", action="store_true",
-                    help="srt permission discovery: run in minimal sandbox, "
-                         "report what the tool needs (domains/paths)")
+                    help="srt permission discovery → srt-settings.json.proposed")
     ap.add_argument("--approve", action="store_true",
-                    help="operator-confirm claims: candidate → enforceable contract")
+                    help="legislate: accept settings + lock contract (contract.json)")
     ap.add_argument("--check-requires", action="store_true",
                     help="pre-flight requires hard check")
     ap.add_argument("--yes", action="store_true",

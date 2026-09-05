@@ -57,10 +57,14 @@ def test_approve_tool_is_idempotent(tmp_path, monkeypatch):
 
     tool = tmp_path / "mini-tool"
     tool.mkdir()
+    settings = {"sandbox": {"srt_settings": "srt-settings.json"}}
     claims = {"allow": [], "deny": []}
-    m = {"name": "mini-tool", "claims": claims, "command": "sh run.sh"}
+    m = {"name": "mini-tool", "claims": claims, "command": "sh run.sh",
+         "sandbox": settings["sandbox"]}
     (tool / "tool.yaml").write_text(yaml.safe_dump(m))
     (tool / "run.sh").write_text("#!/bin/sh\necho hi\n")
+    (tool / "srt-settings.json").write_text(
+        '{"network":{"allowedDomains":[]},"filesystem":{"allowWrite":["/tmp"]}}')
     monkeypatch.setattr("observe.TOOLS_DIR", tmp_path)
 
     approve_tool("mini-tool", yes=True)

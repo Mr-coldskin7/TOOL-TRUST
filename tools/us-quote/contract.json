@@ -1,5 +1,5 @@
 {
-  "schema": 1,
+  "schema": 2,
   "tool": "us-quote",
   "verdict": "pass",
   "claims": {
@@ -31,7 +31,8 @@
     "approved_by": "operator"
   },
   "sandbox": {
-    "srt_settings": "srt-settings.json"
+    "srt_settings": "srt-settings.json",
+    "srt_settings_sha256": "9598bb1870c5de87955be331c646c6d4b43f8f659c70ce196ae6e8019dcbcc2f"
   },
   "provenance": {
     "version": null,

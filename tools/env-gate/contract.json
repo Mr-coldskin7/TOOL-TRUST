@@ -1,5 +1,5 @@
 {
-  "schema": 1,
+  "schema": 2,
   "tool": "env-gate",
   "verdict": "pass",
   "claims": {
@@ -25,7 +25,8 @@
     "approved_by": "operator"
   },
   "sandbox": {
-    "srt_settings": "srt-settings.json"
+    "srt_settings": "srt-settings.json",
+    "srt_settings_sha256": "95e9256a69add351ce624e38cdd26f63ed38bb244d9dd563522b30f559657f67"
   },
   "provenance": {
     "version": null,

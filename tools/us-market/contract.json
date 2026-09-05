@@ -1,5 +1,5 @@
 {
-  "schema": 1,
+  "schema": 2,
   "tool": "us-market",
   "verdict": "pass",
   "claims": {
@@ -31,7 +31,8 @@
     "approved_by": "operator"
   },
   "sandbox": {
-    "srt_settings": "srt-settings.json"
+    "srt_settings": "srt-settings.json",
+    "srt_settings_sha256": "0c47b8ff22245dfa8feb0a41f212876b11b488b782431f0351d8fb14cb26ace7"
   },
   "provenance": {
     "version": null,

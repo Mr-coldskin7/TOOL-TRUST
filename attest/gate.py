@@ -12,6 +12,8 @@ only makes decisions, without running the tool:
 Note: claims (what it does) are checked at attest time by reconcile; provenance
 checks "still the same verified artifact".
 """
+import hashlib
+import hashlib
 import json
 import pathlib
 import shutil
@@ -94,18 +96,35 @@ def decide(manifest: dict, tool_dir: pathlib.Path) -> dict:
                 "detail": f"observed {observed_v!r} -> declared {declared_v!r}; re-review & re-approve"})
 
     # Gate 4: the approved contract must still describe THIS manifest. tool.yaml
-    # is not covered by the source hash, so claims/sandbox drift would otherwise
-    # go unnoticed (e.g. an approved tool silently gaining a new permission).
+    # is not covered by the source hash, and srt-settings.json is only referenced
+    # by name — an approved tool silently gaining a permission (claims or the
+    # sandbox settings file) would otherwise go unnoticed. Lock both.
     snap = load_report(tool_dir)
     if snap and snap.get("tool") == manifest["name"]:
         cur_claims = manifest.get("claims") or {}
         snap_claims = snap.get("claims") or {}
         cur_sb = manifest.get("sandbox") or {}
         snap_sb = snap.get("sandbox") or {}
-        if cur_claims != snap_claims or cur_sb != snap_sb:
+        if cur_claims != snap_claims:
             return _deny(manifest, "contract-mismatch", {
-                "detail": "current manifest claims/sandbox differ from the approved "
+                "detail": "current manifest claims differ from the approved "
                           "contract snapshot; review & re-approve"})
+        sb_ref = cur_sb.get("srt_settings")
+        if (sb_ref or "") != (snap_sb.get("srt_settings") or ""):
+            return _deny(manifest, "contract-mismatch", {
+                "detail": "sandbox.srt_settings reference changed since approval; "
+                          "review & re-approve"})
+        snap_hash = snap_sb.get("srt_settings_sha256")
+        if sb_ref and snap_hash:
+            sett = tool_dir / sb_ref
+            if not sett.exists():
+                return _deny(manifest, "contract-mismatch", {
+                    "detail": f"{sb_ref} missing since approval"})
+            cur_hash = hashlib.sha256(sett.read_bytes()).hexdigest()
+            if cur_hash != snap_hash:
+                return _deny(manifest, "contract-mismatch", {
+                    "detail": f"{sb_ref} content changed since approval "
+                              f"({cur_hash[:12]} != {snap_hash[:12]}); review & re-approve"})
 
     d = {"decision": "allow", "reason": "ok", "tool": manifest["name"]}
     telemetry.log_run({"event": "decide", **d})
