@@ -170,10 +170,32 @@ def approve_tool(tool: str, yes: bool = False) -> None:
           "now ⇒ contract-mismatch on next call")
 
 
+def status_all() -> None:
+    """Human-readable overview: every tool × its authorization state."""
+    from attest.contract import contract_boundary
+
+    rows: list[tuple[str, str]] = []
+    for d in sorted(TOOLS_DIR.iterdir()):
+        ym = d / "tool.yaml"
+        if not ym.is_file():
+            continue
+        try:
+            m = yaml.safe_load(ym.read_text())
+        except OSError:
+            continue
+        name = m.get("name", d.name)
+        rows.append((name, contract_boundary(m, d)))
+    if not rows:
+        print("no tools under " + str(TOOLS_DIR))
+        return
+    width = max(len(n) for n, _ in rows) + 2
+    print("\n".join(f"{n:<{width}}{b}" for n, b in rows))
+
+
 def main() -> None:
     """CLI entry: dispatch on subcommand flags."""
     ap = argparse.ArgumentParser(prog="observe")
-    ap.add_argument("tool", help="tool name under tools/")
+    ap.add_argument("tool", nargs="?", default=None, help="tool name under tools/")
     ap.add_argument("inputs", nargs="*", default=[])
     ap.add_argument("--scan", action="store_true",
                     help="srt permission discovery → srt-settings.json.proposed")
@@ -181,10 +203,18 @@ def main() -> None:
                     help="legislate: accept settings + lock contract (contract.json)")
     ap.add_argument("--check-requires", action="store_true",
                     help="pre-flight requires hard check")
+    ap.add_argument("--status", action="store_true",
+                    help="overview: every tool × authorization state")
     ap.add_argument("--yes", action="store_true",
                     help="skip interactive confirm (with --approve)")
     args = ap.parse_args()
 
+    if args.status:
+        status_all()
+        return
+    if not args.tool:
+        ap.print_help()
+        return
     if args.scan:
         scan_tool(args.tool, args.inputs)
         return

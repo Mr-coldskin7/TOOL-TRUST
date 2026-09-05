@@ -43,4 +43,14 @@ if __name__ == "__main__":
         mcp.run(transport="stdio")
     else:
         print(f"toolhub HTTP on http://localhost:8000/mcp")
+        import pathlib as _pl
+        import yaml as _yaml
+        from attest.contract import contract_boundary
+        print("── tool authorization overview ────────────")
+        for p in sorted(_pl.Path("tools").glob("*/tool.yaml")):
+            try:
+                m = _yaml.safe_load(p.read_text())
+                print(" ", contract_boundary(m, p.parent))
+            except Exception:
+                continue
         mcp.run(transport="http", port=8000)

@@ -131,6 +131,11 @@ def decide(manifest: dict, tool_dir: pathlib.Path) -> dict:
     return d
 
 
+def contract_boundary(manifest: dict, tool_dir: pathlib.Path) -> str:
+    """Re-export: one-line approved-permission summary for MCP tool labels."""
+    return contract.contract_boundary(manifest, tool_dir)
+
+
 def format_command(manifest: dict, inputs: list[str], tool_dir: pathlib.Path) -> list[str]:
     """Build argv: command + inputs. Relative commands resolve against tool_dir."""
     cmd = manifest["command"].split()

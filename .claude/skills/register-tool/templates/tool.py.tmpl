@@ -1,4 +1,3 @@
-# .claude/skills/register-tool/templates/tool.py.tmpl
 import pathlib
 from fastmcp import FastMCP
 import yaml
@@ -9,10 +8,12 @@ _TOOL_DIR = pathlib.Path(__file__).resolve().parent
 
 
 def register(mcp: FastMCP) -> None:
-    """经决策闸包装的工具：attestation 校验 + requires 硬拒 + telemetry。"""
+    """经决策闸包装的工具:attestation 校验 + requires 硬拒 + telemetry。"""
     manifest = yaml.safe_load((_TOOL_DIR / "tool.yaml").read_text())
 
-    @mcp.tool
     def {{ tool_name }}({{ params }}) -> dict:
         """{{ description }}"""
         return gate.gated_invoke(manifest, [{{ args_list_raw }}], _TOOL_DIR)
+
+    {{ tool_name }}.__doc__ = f"{{{ '{{ tool_name }}' }}.__doc__}}\n\n{gate.contract_boundary(manifest, _TOOL_DIR)}"
+    mcp.tool({{ tool_name }})

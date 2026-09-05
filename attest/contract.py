@@ -18,6 +18,8 @@ Rule: auto-generated claims can NEVER auto-upgrade to operator-approved — that
 is the "no auto-expansion" invariant.
 """
 import datetime
+import json
+import pathlib
 
 ORIGINS = ("author-built", "observed-suggested", "operator-approved")
 
@@ -57,3 +59,38 @@ def approve(claims: dict) -> dict:
         datetime.timezone.utc
     ).isoformat(timespec="seconds")
     return claims
+
+def contract_boundary(manifest: dict, tool_dir: pathlib.Path) -> str:
+    """One-line human-readable summary of the tool's approved permissions.
+
+    Read from the committed contract.json snapshot + the srt-settings.json it
+    locked. Used to surface the authorization state where agents/users can see
+    it (MCP tool descriptions, status views). Falls back to 'unmanaged'.
+    """
+    snap_path = pathlib.Path(tool_dir) / "contract.json"
+    if not snap_path.exists():
+        return "[contract] unmanaged (no contract) - legacy/unapproved"
+    try:
+        snap = json.loads(snap_path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return "[contract] unreadable contract.json"
+
+    sb = snap.get("sandbox") or {}
+    settings = {}
+    settings_name = sb.get("srt_settings")
+    if settings_name:
+        sp = pathlib.Path(tool_dir) / settings_name
+        if sp.exists():
+            try:
+                settings = json.loads(sp.read_text())
+            except (json.JSONDecodeError, OSError):
+                settings = {}
+    net = settings.get("network", {})
+    doms = [d for d in (net.get("allowedDomains") or []) if isinstance(d, str)]
+    fs = settings.get("filesystem", {})
+    writes = [w for w in (fs.get("allowWrite") or []) if isinstance(w, str)]
+    approved_at = str(snap.get("approved_at") or "?")[:16]
+    return ("[contract] operator-approved "
+            f"network=[{', '.join(doms) if doms else '-'}] "
+            f"writes=[{', '.join(writes) if writes else '-'}] "
+            f"approved {approved_at}")
