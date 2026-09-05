@@ -1,0 +1,23 @@
+{
+  "network": {
+    "allowedDomains": [
+      "api.github.com"
+    ],
+    "deniedDomains": []
+  },
+  "filesystem": {
+    "denyRead": [
+      "~/.ssh",
+      "~/.aws/credentials"
+    ],
+    "denyWrite": [
+      ".env",
+      "**/.env",
+      "**/.git/**"
+    ],
+    "allowWrite": [
+      "/tmp",
+      "/private/tmp"
+    ]
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "schema": 2,
+  "tool": "demo-fetch",
+  "verdict": "pass",
+  "claims": {
+    "origin": "operator-approved",
+    "allow": [
+      "exit",
+      "fd",
+      "file-read",
+      "memory",
+      "network",
+      "stdout",
+      "sync"
+    ],
+    "deny": [
+      "exec",
+      "file-write",
+      "other",
+      "perms",
+      "process"
+    ],
+    "approved_at": "2026-09-05T04:51:28+00:00",
+    "approved_by": "operator"
+  },
+  "sandbox": {
+    "srt_settings": "srt-settings.json",
+    "srt_settings_sha256": "edc20fb38759fa723b104cbddad2119a8c1d57d1abe626dd3ce02d30e3c5e486"
+  },
+  "provenance": {
+    "version": null,
+    "hash": "c344670c95cb23b9a568ed6d4cfbdd123ada3c31ff42a4eec6dd6e63604e771d"
+  },
+  "approved_by": "operator",
+  "approved_at": "2026-09-05T04:51:28+00:00"
+}

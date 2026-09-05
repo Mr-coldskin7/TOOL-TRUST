@@ -1,0 +1,33 @@
+name: demo-fetch
+description: Sample onboarding tool — fetches a line from api.github.com and appends
+  it to /tmp/demo-fetch.log
+command: python3 fetch.py
+inputs:
+- none
+claims:
+  origin: operator-approved
+  allow:
+  - exit
+  - fd
+  - file-read
+  - memory
+  - network
+  - stdout
+  - sync
+  deny:
+  - exec
+  - file-write
+  - other
+  - perms
+  - process
+  approved_at: '2026-09-05T04:51:28+00:00'
+  approved_by: operator
+requires:
+  env: []
+  files:
+  - fetch.py
+  exec:
+  - python3
+  writable: []
+sandbox:
+  srt_settings: srt-settings.json

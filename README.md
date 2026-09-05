@@ -137,6 +137,14 @@ gate to `violation-deny`.
 uv run python server.py --stdio
 ```
 
+**See the whole flow live** (sample tool `demo-fetch`, needs srt):
+
+```bash
+bash scripts/demo_onboarding.sh
+```
+It shows unmanaged → `--scan` evidence → `--approve` lock → real enforced call →
+silent permission escalation denied on the next call.
+
 Then point your MCP client at it. For example, in **pi**:
 
 ```json

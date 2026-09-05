@@ -86,6 +86,15 @@ def scan_tool(tool: str, inputs: list[str]) -> None:
 
     proposed = tool_dir / f"srt-settings.json{PROPOSED_SUFFIX}"
     proposed.write_text(json.dumps(r["suggested"], indent=2, ensure_ascii=False))
+
+    # declare the reference in tool.yaml so --approve can accept it
+    sb = manifest.get("sandbox") or {}
+    if not sb.get("srt_settings"):
+        manifest["sandbox"] = {"srt_settings": "srt-settings.json"}
+        (tool_dir / "tool.yaml").write_text(
+            yaml.safe_dump(manifest, allow_unicode=True, sort_keys=False))
+        print("  [scan] tool.yaml 已声明 sandbox.srt_settings: srt-settings.json")
+
     print(f"\n>>> suggested permissions written to {proposed}:\n"
           + permission_summary(manifest, r["suggested"]))
     print(f"\n    review it — then run:  observe.py {tool} --approve   "
