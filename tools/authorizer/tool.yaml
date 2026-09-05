@@ -1,0 +1,28 @@
+name: authorizer
+description: Authorization management for the toolhub — status / onboard / approve / revoke tools (human-in-the-loop; approve is the legislative step)
+command: python3 authorizer.py
+inputs:
+- action
+claims:
+  origin: author-built
+  allow:
+  - exit
+  - fd
+  - file-read
+  - memory
+  - network
+  - stdout
+  - sync
+  deny:
+  - exec
+  - file-write
+  - other
+  - perms
+  - process
+requires:
+  env: []
+  files:
+  - authorizer.py
+  exec:
+  - python3
+  writable: []

@@ -89,6 +89,8 @@ uv sync
 | `sha_tool` | SHA-256 of input string | pure compute | ✓ (defaults only) |
 | `cache_tool` | Append a line to `/tmp/cache.log` | append-only write | ✓ (write /tmp) |
 | `env_gate` | Demo hard-deny when host env mismatches | no side effects | ✓ (meta: requires-gated) |
+| `demo_fetch` | Sample onboarding tool (GitHub zen → /tmp log) | network + write | ✓ (sample, demo_only: api.github.com, /tmp) |
+| `authorizer` | Manage tool authorization (status/onboard/approve/revoke) | management | — (management plane) |
 
 Every `✓` tool was permission-discovered via `observe.py <tool> --scan` (run inside
 the minimal sandbox, read what it needed), operator-approved, and now runs
@@ -135,6 +137,21 @@ gate to `violation-deny`.
 
 ```bash
 uv run python server.py --stdio
+```
+
+**Authorize interactively** (guided wizard, better than raw JSON):
+
+```bash
+uv run python observe.py demo-fetch --revoke
+uv run python observe.py demo-fetch --onboard   # 编号权限表 → 移除不想要的 → 回车锁定
+uv run python observe.py --status               # 全工具授权总览
+```
+
+**Manage from any MCP client** (management plane as MCP tools — `approve`
+should be gated by the client's permission system for human confirmation):
+
+```
+authorizer_status · authorizer_onboard(tool) · authorizer_approve(tool) · authorizer_revoke(tool)
 ```
 
 **See the whole flow live** (sample tool `demo-fetch`, needs srt):
@@ -187,6 +204,7 @@ The skill will generate source, manifest, attestation wrapper, and a smoke test.
 | **Gate** (`gate.py`) | Per-call decision | `attestation-fail` / `requires` / `provenance` / **contract-mismatch** (manifest claims drifted, or `srt-settings.json` content changed — its sha256 is in the committed snapshot → refuse). |
 | **Enforcement** (`srt`) | Per-call isolation | Approved contracts run inside srt on the host; any out-of-contract access → `violation-deny` + audit. |
 | **Server filter** (`server.py`) | Registration-time filter | Tools without a clean contract are not registered, so the agent cannot even see them. |
+| **Authorization** (`attest/authorize.py` + `observe --onboard` + `authorizer` MCP) | Human-in-the-loop permission governance | `status` / `onboard` (scan evidence table) / `approve` (legislation, requires human confirmation) / `revoke`; same state machine drives CLI and MCP surfaces. |
 
 Gate 4 (`contract-mismatch`) matters because `tool.yaml` is deliberately not
 part of the source hash: an approved tool silently gaining a new permission in
