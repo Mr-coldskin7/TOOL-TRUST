@@ -1,5 +1,5 @@
 import pathlib
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
 import yaml
 
 from attest import gate
@@ -11,9 +11,10 @@ def register(mcp: FastMCP) -> None:
     """经决策闸包装的工具:attestation 校验 + requires 硬拒 + telemetry。"""
     manifest = yaml.safe_load((_TOOL_DIR / "tool.yaml").read_text())
 
-    def {{ tool_name }}({{ params }}) -> dict:
+    def {{ tool_name }}({{ params }}, ctx: Context | None = None) -> dict:
         """{{ description }}"""
-        return gate.gated_invoke(manifest, [{{ args_list_raw }}], _TOOL_DIR)
+        return gate.gated_invoke(manifest, [{{ args_list_raw }}], _TOOL_DIR,
+                                 caller=ctx.client_id if ctx else None)
 
-    {{ tool_name }}.__doc__ = f"{{{ '{{ tool_name }}' }}.__doc__}}\n\n{gate.contract_boundary(manifest, _TOOL_DIR)}"
+    {{ tool_name }}.__doc__ = f"{'{{ tool_name }}'}.__doc__}}\n\n{gate.contract_boundary(manifest, _TOOL_DIR)}"
     mcp.tool({{ tool_name }})

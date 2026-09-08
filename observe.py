@@ -122,6 +122,13 @@ def approve_tool(tool: str, yes: bool = False) -> None:
             raise SystemExit(f"nothing to accept: {target} missing and no {pp.name}")
         shutil.copyfile(pp, target)
         print(f"[contract] promoting {pp.name} → {target.name}")
+    warn = authorize.first_connect_warning(manifest)
+    if warn:
+        print("\n" + warn)
+        if not yes:
+            if input("  Type 'reviewed' to confirm you inspected the source: ").strip().lower() != "reviewed":
+                print("aborted — source review required")
+                return
     settings = json.loads(target.read_text())
     print(f"[contract] reviewing {tool} — EXACT permissions to be locked in:\n"
           + permission_summary(manifest, settings))
@@ -162,6 +169,13 @@ def onboard(tool: str, inputs: list[str], yes: bool = False) -> None:
     manifest = load_manifest(tool)
     if not manifest.get("claims"):
         raise SystemExit(f"no claims; register the tool first (see register-tool)")
+    warn = authorize.first_connect_warning(manifest)
+    if warn:
+        print("\n" + warn)
+        if not yes:
+            if input("  Type 'reviewed' to confirm you inspected the source: ").strip().lower() != "reviewed":
+                print("aborted — source review required")
+                return
     suggested, proposed = _scan_and_propose(tool, inputs)
 
     while True:
@@ -208,9 +222,11 @@ def status_all() -> None:
         return
     width = max(len(r["tool"]) for r in rows) + 2
     for r in rows:
-        print(f"  {r['tool']:<{width}} {r['state']:<10} "
+        flag = " ⚠" if r["state"] == "drifted" else ""
+        extra = f" ({r.get('detail')})" if r.get("detail") else ""
+        print(f"  {r['tool']:<{width}} {r['state']:<10}{flag}"
               f"net=[{r['network']}] writes=[{r['writes']}] "
-              f"approved {r['approved_at']}")
+              f"approved {r['approved_at']}{extra}")
 
 
 def main() -> None:

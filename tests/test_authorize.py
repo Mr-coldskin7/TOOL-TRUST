@@ -76,3 +76,43 @@ def test_permission_rows_shape():
     tags = [r[0] for r in rows]
     assert tags == ["NET", "WRITE", "NO-WRITE", "NO-READ", "CLAIMS-ALLOW", "CLAIMS-DENY"]
     assert any("x.com" in r[1] for r in rows if r[0] == "NET")
+
+def test_source_kind_and_first_connect():
+    from attest import authorize
+    m = {"name": "no-src", "claims": {"allow": []}}
+    assert authorize.source_kind(m) == "unknown"
+    assert authorize.first_connect_warning(m) is not None
+    m2 = {"name": "authored", "provenance": {"source": "author:lishanyi"},
+          "claims": {"allow": []}}
+    assert authorize.source_kind(m2) == "author:lishanyi"
+    assert authorize.first_connect_warning(m2) is None
+
+
+def test_approve_records_source():
+    from attest import authorize
+    d = tmp = __import__("pathlib").Path(".")  # placeholder, real test below
+
+
+def test_approve_records_source(tmp_path):
+    from attest import authorize
+    d = tmp_path / "mini-x"
+    d.mkdir()
+    (d / "run.sh").write_text("#!/bin/sh\necho hi\n")
+    (d / "tool.yaml").write_text(yaml.safe_dump({
+        "name": "mini-x", "claims": {"allow": ["stdout", "exit"]},
+        "sandbox": {"srt_settings": "srt-settings.json"}}))
+    (d / "srt-settings.json").write_text(json.dumps({"network": {"allowedDomains": []}}))
+    m = yaml.safe_load((d / "tool.yaml").read_text())
+    authorize.approve_core(m, d)
+    snap = json.loads((d / "contract.json").read_text())
+    assert snap["source"] == "unknown"
+    m2 = yaml.safe_load((d / "tool.yaml").read_text())
+    assert authorize.verify_snapshot(m2, d) == (True, "ok")
+    # drift when settings change
+    sett = json.loads((d / "srt-settings.json").read_text())
+    sett["network"]["allowedDomains"] = ["evil.io"]
+    (d / "srt-settings.json").write_text(json.dumps(sett))
+    ok, reason = authorize.verify_snapshot(m2, d)
+    assert not ok and "content changed" in reason
+    st = authorize.tool_state(m2, d)
+    assert st["state"] == "drifted"

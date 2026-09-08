@@ -65,6 +65,37 @@ def render_table(rows: list[list[str]], title: str) -> str:
     return "\n".join(out)
 
 
+def verify_snapshot(manifest: dict, tool_dir: pathlib.Path) -> tuple[bool, str]:
+    """Check current manifest + settings against the committed contract snapshot.
+
+    Mirrors gate Gate 4 exactly (single source of truth for 'is the approved
+    contract still intact?'). Returns (ok, reason).
+    """
+    cpath = pathlib.Path(tool_dir) / "contract.json"
+    if not cpath.exists():
+        return True, "no contract (unmanaged)"
+    try:
+        snap = json.loads(cpath.read_text())
+    except (json.JSONDecodeError, OSError):
+        return False, "unreadable contract.json"
+    if snap.get("tool") != manifest.get("name"):
+        return True, "unrelated contract"
+    if (manifest.get("claims") or {}) != (snap.get("claims") or {}):
+        return False, "claims drifted from approved snapshot"
+    sb = manifest.get("sandbox") or {}
+    snap_sb = snap.get("sandbox") or {}
+    if (sb.get("srt_settings") or "") != (snap_sb.get("srt_settings") or ""):
+        return False, "sandbox.srt_settings reference changed"
+    snap_hash = snap_sb.get("srt_settings_sha256")
+    if sb.get("srt_settings") and snap_hash:
+        sp = pathlib.Path(tool_dir) / sb["srt_settings"]
+        if not sp.exists():
+            return False, "srt-settings.json missing since approval"
+        if hashlib.sha256(sp.read_bytes()).hexdigest() != snap_hash:
+            return False, "srt-settings.json content changed since approval"
+    return True, "ok"
+
+
 # ---------------------------------------------------------------------------
 # status
 # ---------------------------------------------------------------------------
@@ -75,6 +106,10 @@ def tool_state(manifest: dict, tool_dir: pathlib.Path) -> dict:
     cpath = pathlib.Path(tool_dir) / "contract.json"
     if not cpath.exists():
         return {"tool": name, "state": "unmanaged",
+                "network": "-", "writes": "-", "approved_at": "-"}
+    ok, reason = verify_snapshot(manifest, tool_dir)
+    if not ok:
+        return {"tool": name, "state": "drifted", "detail": reason,
                 "network": "-", "writes": "-", "approved_at": "-"}
     try:
         snap = json.loads(cpath.read_text())
@@ -164,6 +199,7 @@ def approve_core(manifest: dict, tool_dir: pathlib.Path) -> dict:
         },
         "approved_by": claims.get("approved_by"),
         "approved_at": claims.get("approved_at"),
+        "source": source_kind(manifest),
     }
     (tool_dir / "contract.json").write_text(
         json.dumps(snapshot, ensure_ascii=False, indent=2))
@@ -197,3 +233,19 @@ def revoke(manifest: dict, tool_dir: pathlib.Path) -> dict:
             yaml.safe_dump(manifest, allow_unicode=True, sort_keys=False))
     return {"tool": tool_dir.name, "decision": "revoked",
             "detail": "contract.json removed; srt-settings.json kept for re-review"}
+
+def source_kind(manifest: dict) -> str:
+    """Declared source of a tool ('unknown' when none declared)."""
+    prov = manifest.get("provenance") or {}
+    return (prov.get("source") or manifest.get("source") or "").strip() or "unknown"
+
+
+def first_connect_warning(manifest: dict) -> str | None:
+    """Warning when a tool has no declared source: first-connect human review."""
+    if source_kind(manifest) != "unknown":
+        return None
+    return (
+        "⚠ first-connect: no declared source for this tool.\n"
+        "   Claims/settings come from a sandboxed run — NOT from reading the\n"
+        f"   code. Inspect tools/{manifest.get('name', '?')} yourself before approving."
+    )

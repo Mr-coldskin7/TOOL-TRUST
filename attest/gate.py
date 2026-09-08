@@ -19,7 +19,7 @@ import pathlib
 import shutil
 import subprocess
 
-from attest import contract, live, prereq, provenance, telemetry
+from attest import authorize, contract, live, prereq, provenance, telemetry
 
 
 def _read_snapshot(tool_dir: pathlib.Path) -> dict | None:
@@ -95,36 +95,13 @@ def decide(manifest: dict, tool_dir: pathlib.Path) -> dict:
             return _deny(manifest, "stale-version", {
                 "detail": f"observed {observed_v!r} -> declared {declared_v!r}; re-review & re-approve"})
 
-    # Gate 4: the approved contract must still describe THIS manifest. tool.yaml
-    # is not covered by the source hash, and srt-settings.json is only referenced
-    # by name — an approved tool silently gaining a permission (claims or the
-    # sandbox settings file) would otherwise go unnoticed. Lock both.
-    snap = load_report(tool_dir)
-    if snap and snap.get("tool") == manifest["name"]:
-        cur_claims = manifest.get("claims") or {}
-        snap_claims = snap.get("claims") or {}
-        cur_sb = manifest.get("sandbox") or {}
-        snap_sb = snap.get("sandbox") or {}
-        if cur_claims != snap_claims:
-            return _deny(manifest, "contract-mismatch", {
-                "detail": "current manifest claims differ from the approved "
-                          "contract snapshot; review & re-approve"})
-        sb_ref = cur_sb.get("srt_settings")
-        if (sb_ref or "") != (snap_sb.get("srt_settings") or ""):
-            return _deny(manifest, "contract-mismatch", {
-                "detail": "sandbox.srt_settings reference changed since approval; "
-                          "review & re-approve"})
-        snap_hash = snap_sb.get("srt_settings_sha256")
-        if sb_ref and snap_hash:
-            sett = tool_dir / sb_ref
-            if not sett.exists():
-                return _deny(manifest, "contract-mismatch", {
-                    "detail": f"{sb_ref} missing since approval"})
-            cur_hash = hashlib.sha256(sett.read_bytes()).hexdigest()
-            if cur_hash != snap_hash:
-                return _deny(manifest, "contract-mismatch", {
-                    "detail": f"{sb_ref} content changed since approval "
-                              f"({cur_hash[:12]} != {snap_hash[:12]}); review & re-approve"})
+    # Gate 4: the approved contract must still describe THIS manifest. Shared
+    # with the health scan (authorize.verify_snapshot) so --status and the gate
+    # can never disagree about authorization integrity.
+    ok, reason = authorize.verify_snapshot(manifest, tool_dir)
+    if not ok:
+        return _deny(manifest, "contract-mismatch", {
+            "detail": f"{reason}; review & re-approve"})
 
     d = {"decision": "allow", "reason": "ok", "tool": manifest["name"]}
     telemetry.log_run({"event": "decide", **d})
@@ -147,7 +124,8 @@ def format_command(manifest: dict, inputs: list[str], tool_dir: pathlib.Path) ->
     return cmd + inputs
 
 
-def gated_invoke(manifest: dict, inputs: list[str], tool_dir: pathlib.Path) -> dict:
+def gated_invoke(manifest: dict, inputs: list[str], tool_dir: pathlib.Path,
+                 caller: str | None = None) -> dict:
     """Invoke a tool through the decision gate (deny → no run, allow → execute).
 
     Execution path depends on contract enforcement status:
@@ -161,13 +139,15 @@ def gated_invoke(manifest: dict, inputs: list[str], tool_dir: pathlib.Path) -> d
       manifest: tool.yaml contents.
       inputs:   extra argv entries.
       tool_dir: cwd for the process.
+      caller:   optional identity of the invoking session/agent (audit).
 
     Returns:
       Result dict with decision/returncode/stdout/stderr (+violations when enforced).
     """
     d = decide(manifest, tool_dir)
     if d["decision"] != "allow":
-        return {"tool": manifest["name"], **d, "output": ""}
+        telemetry.log_run({**d, "event": "decide", "caller": caller})
+        return {"tool": manifest["name"], **d, "output": "", "caller": caller}
 
     # Enforcement path: operator-approved contract → run inside srt
     sb = manifest.get("sandbox") or {}
@@ -204,10 +184,11 @@ def gated_invoke(manifest: dict, inputs: list[str], tool_dir: pathlib.Path) -> d
             "stdout": r["stdout"].strip(),
             "stderr": r["stderr"].strip(),
             "violations": r["violations"],
+            "caller": caller,
         }
         telemetry.log_run({"event": "invoke", "tool": out["tool"],
                            "decision": out["decision"], "returncode": out["returncode"],
-                           "violations": out["violations"], "inputs": inputs})
+                           "violations": out["violations"], "inputs": inputs, "caller": caller})
         return out
 
     argv = format_command(manifest, inputs, tool_dir)
@@ -223,7 +204,7 @@ def gated_invoke(manifest: dict, inputs: list[str], tool_dir: pathlib.Path) -> d
             "stderr": "",
         }
         telemetry.log_run(
-            {"event": "invoke", "tool": out["tool"], "launch_error": out["launch_error"]}
+            {"event": "invoke", "tool": out["tool"], "launch_error": out["launch_error"], "caller": caller}
         )
         return out
     out = {
@@ -242,6 +223,7 @@ def gated_invoke(manifest: dict, inputs: list[str], tool_dir: pathlib.Path) -> d
             "stdout_len": len(out["stdout"]),
             "stderr_len": len(out["stderr"]),
             "inputs": inputs,
+            "caller": caller,
         }
     )
     return out
