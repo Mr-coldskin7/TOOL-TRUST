@@ -34,22 +34,7 @@ MIN_SETTINGS = {
     },
 }
 
-_EPERM_RE = re.compile(
-    r"Operation not permitted: ['\"]([^'\"]+)['\"]"
-    r"|Permission denied: ['\"]([^'\"]+)['\"]"
-    r"|can't open ['\"]?([^'\"]+?)['\"]?: .*[Pp]ermission"
-)
-
-
-def _eperm_paths(stderr: str) -> list[str]:
-    """Extract filesystem paths the child could not access (EPERM)."""
-    out: list[str] = []
-    for m in _EPERM_RE.finditer(stderr):
-        for g in m.groups():
-            if g and g not in out:
-                out.append(g)
-    return out
-
+from attest.live import eperm_paths as _eperm_paths  # noqa: F401
 
 def _build_suggested(denials: list[dict], settings: dict) -> dict:
     """Turn collected denials into a suggested (minimal) settings grant. Pure."""
@@ -72,6 +57,8 @@ def _build_suggested(denials: list[dict], settings: dict) -> dict:
                 # filesystem denials that sat outside our defaults → suggest allowWrite
                 suggested["filesystem"]["allowWrite"].append(t)
     return suggested
+
+
 
 
 def scan(argv: list[str], settings: dict | None = None, cwd: str | None = None,
@@ -99,9 +86,7 @@ def scan(argv: list[str], settings: dict | None = None, cwd: str | None = None,
         except OSError:
             pass
 
-    denials = list(r["violations"])  # net-block / net-deny events
-    for p in _eperm_paths(r["stderr"]):
-        denials.append({"kind": "fs-deny", "target": p, "port": None})
+    denials = list(r["violations"])  # net-block / net-deny / fs-deny events
 
     suggested = _build_suggested(denials, settings)
 

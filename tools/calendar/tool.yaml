@@ -1,0 +1,40 @@
+name: calendar
+description: 用 EventKit 直接向 Apple 日历添加事件 / 列出日历（持久写操作）
+command: swift cal.swift
+inputs:
+- title
+- start
+- end
+- calendar
+- location
+- notes
+claims:
+  allow:
+  - exit
+  - fd
+  - file-read
+  - file-write
+  - fork
+  - memory
+  - process
+  - stdout
+  - sync
+  deny:
+  - network
+  - other
+  - perms
+  - stderr
+  origin: operator-approved
+  approved_at: '2026-09-05T08:30:00+00:00'
+  approved_by: operator
+requires:
+  env: []
+  files:
+  - cal.swift
+  exec:
+  - swiftc
+  - swift
+  writable:
+  - cal
+sandbox:
+  srt_settings: srt-settings.json

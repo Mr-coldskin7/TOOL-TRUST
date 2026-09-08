@@ -26,6 +26,24 @@ INSTALL_HINT = "npm install -g @anthropic-ai/sandbox-runtime  (Linux also: apt i
 _BLOCKED_RE = re.compile(r"\[SandboxDebug\] Connection blocked to ([^:\s]+)(?::(\d+))?")
 _DENYING_RE = re.compile(r"\[SandboxDebug\].*denying: ([^:\s]+)(?::(\d+))?")
 
+# filesystem denials are SILENT in seatbelt/bwrap (child gets EPERM) — recover
+# the path from the child's own stderr so enforce-time fs breach is observable
+_EPERM_RE = re.compile(
+    r"Operation not permitted: ['\\\"]([^'\\\"]+)['\\\"]"
+    r"|Permission denied: ['\\\"]([^'\\\"]+)['\\\"]"
+    r"|can't open ['\\\"]?([^'\\\"]+?)['\\\"]?: .*[Pp]ermission"
+)
+
+
+def eperm_paths(stderr: str) -> list[str]:
+    """Filesystem paths the child could not access (EPERM), preserving order."""
+    out: list[str] = []
+    for m in _EPERM_RE.finditer(stderr):
+        for g in m.groups():
+            if g and g not in out:
+                out.append(g)
+    return out
+
 
 def ensure_srt() -> str:
     """Return srt binary path; raise RuntimeError with install hint if missing."""
@@ -57,6 +75,12 @@ def violation_events(stderr: str) -> list[dict]:
         ev = {"kind": "net-deny", "target": m.group(1),
               "port": int(m.group(2)) if m.group(2) else None}
         key = (ev["kind"], ev["target"], ev["port"])
+        if key not in seen:
+            seen.add(key)
+            out.append(ev)
+    for path_ in eperm_paths(stderr):
+        ev = {"kind": "fs-deny", "target": path_, "port": None}
+        key = (ev["kind"], ev["target"], None)
         if key not in seen:
             seen.add(key)
             out.append(ev)

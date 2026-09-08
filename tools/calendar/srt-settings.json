@@ -1,0 +1,7 @@
+{
+  "network": { "allowedDomains": [], "deniedDomains": ["*"] },
+  "filesystem": {
+    "denyRead": ["~/.ssh", "~/.aws/credentials"],
+    "denyWrite": [".env", "**/.env", "**/.git/**"]
+  }
+}

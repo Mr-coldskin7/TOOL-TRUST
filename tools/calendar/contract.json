@@ -1,0 +1,37 @@
+{
+  "schema": 2,
+  "tool": "calendar",
+  "verdict": "pass",
+  "claims": {
+    "allow": [
+      "exit",
+      "fd",
+      "file-read",
+      "file-write",
+      "fork",
+      "memory",
+      "process",
+      "stdout",
+      "sync"
+    ],
+    "deny": [
+      "network",
+      "other",
+      "perms",
+      "stderr"
+    ],
+    "origin": "operator-approved",
+    "approved_at": "2026-09-05T08:30:00+00:00",
+    "approved_by": "operator"
+  },
+  "sandbox": {
+    "srt_settings": "srt-settings.json",
+    "srt_settings_sha256": "e4400a4a6813e33f4e37937e3e4583076110260690821daab514b9f1a1020312"
+  },
+  "provenance": {
+    "version": null,
+    "hash": "264972b6db52a1cff18e8113db1736c778de597961740f8a8eda602048f6f91f"
+  },
+  "approved_by": "operator",
+  "approved_at": "2026-09-05T08:30:00+00:00"
+}

@@ -11,17 +11,12 @@ without operator approval, compiling tool self-testimony into a sandbox
 policy amplifies the circular-trust we just killed; and sandbox feasibility
 must be proven before anything is built on it.
 
-- [ ] **Step 1 — CONTRACT GOVERNANCE (laws before locks)**:
-      - claims gain `origin`: author-built | observed-suggested | operator-approved
-      - `--generate-claims` downgraded: output is `observed-suggested` candidates,
-        NOT law; needs operator review/approval to become effective
-      - a confirm entry point (CLI) to review & approve candidate claims
-      - independent of sandbox; destroys the self-testimony loop
-- [ ] **Step 2 — SANDBOX FEASIBILITY SPIKE (≤1 day, parallel to Step 1)**:
-      seatbelt/sandbox-exec driven to "wraps a real tool call" depth on macOS
-      (long-running procs, network limiting, exit codes, log reading) —
-      prove the tech gamble before building on it (sandbox-exec is deprecated-
-      flagged by Apple; SIP/permissions risk)
+- [x] **Step 1 — CONTRACT GOVERNANCE (laws before locks)** (done 2026-09-05):
+      - claims `origin`: author-built | operator-approved; `--scan` proposes,
+        `--onboard`/`--approve` legislate (human-in-the-loop); destroys
+        self-testimony
+- [x] **Step 2 — SANDBOX FEASIBILITY** (done 2026-09-03, via srt): srt drives
+      real tool calls on macOS seatbelt + Linux bwrap; CI installs srt+bwrap
 - [ ] **Step 3 — LIVE RECONCILIATION (enforcement layer)**:
       build on Steps 1+2:
       - ~~`attest/profile.py`~~ → **deleted 2026-09-03**: custom seatbelt layer dropped,
@@ -31,9 +26,9 @@ must be proven before anything is built on it.
         `sandbox.srt_settings` tools into srt (deny srt-not-installed/srt-settings-missing)
       - [x] **violation → deny**: runtime breach flips decision to `violation-deny`
         with detail (live reconcile decision loop closed)
-      - [x] two enforced tools: provenance-demo + cache-tool (both operator-approved,
-        both with srt-settings.json; cache-tool append /tmp verified live)
-      - [ ] claim granularity: hosts/paths/args allowlists as part of the contract
+      - [x] nine enforced tools (all operator-approved; settings content locked via sha256)
+      - [x] claim granularity: hosts (domains) + paths via srt-settings; enforce-time
+        fs-deny parsed from EPERM (filesystem breach now visible as violation-deny, 2026-09-08)
       - [ ] optionally wrap the whole MCP server in srt (coarse-grained enforcement)
       - closes conditional-evil + self-testimony via enforcement
 
@@ -67,12 +62,14 @@ must be proven before anything is built on it.
       report.json
   - hand-run a few times first to judge noise ratio before wiring into pipeline
   - fills the honest "we don't scan tool source" gap → SAST/DAST/SCA closed loop
-- [ ] **Caller identity in the gate** (session/agent context) — Identity Spoofing
-      mitigation
+- [x] **Caller identity in the gate** (2026-09-08): `gated_invoke(caller=...)` threads
+      session identity into telemetry + results; MCP tools inject fastmcp Context
+      (ctx.client_id) — Identity Spoofing mitigation
 - [ ] **Replay real tool traces into bench** (synthetic-vs-real comparison; dogfood
       `_drop_launch_execve` / noise filtering)
 - [ ] Fully manifest-driven registration: add a tool by editing `tool.yaml` only
-- [ ] `toolhub` health scan: detect stale / failed attestation reports
+- [x] `toolhub` health scan (2026-09-08): `observe.py --status` + `authorizer_status`
+      surface `drifted ⚠` when contract/settings deviate (shared verify_snapshot with gate)
 
 ## Long term (ecosystem)
 
@@ -80,7 +77,6 @@ must be proven before anything is built on it.
       inspiration / SCA-style source trust)
 - [ ] **Executable-plan accountability** (Intent Breaking candidate): declare plan
       steps → verify steps actually ran
-- [ ] Multi-language runtime support (Node, Go) in base image
 - [ ] Telemetry dashboard from `cache_tool` logs
 
 ---
