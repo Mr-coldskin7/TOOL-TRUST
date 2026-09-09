@@ -100,6 +100,7 @@ def scan_tool(tool: str, inputs: list[str]) -> None:
     suggested, proposed = _scan_and_propose(tool, inputs)
     print(f"\n>>> suggested permissions written to {proposed}:\n"
           + permission_summary(manifest, suggested))
+    _print_static(TOOLS_DIR / tool, manifest.get("command"))
     print(f"\n    review it — then run:  observe.py {tool} --approve   "
           "(y/N confirms and LOCKS these permissions)")
 
@@ -140,6 +141,21 @@ def approve_tool(tool: str, yes: bool = False) -> None:
     print(f"[contract] {tool} APPROVED + LOCKED (settings sha256 {r['settings_sha256']}…)\n"
           f"          {tool_dir / 'contract.json'} written — edit srt-settings.json "
           "now ⇒ contract-mismatch on next call")
+
+
+def _print_static(tool_dir: pathlib.Path, command: str | None) -> None:
+    """Static sniff (SAST-lite): advisory findings from the tool's source."""
+    from attest import sast as sast_mod
+
+    findings = sast_mod.scan_static(tool_dir, command)
+    if not findings:
+        print("\n── static sniff ─────────────── 0 findings")
+        return
+    print("\n── static sniff (advisory) ──────")
+    for f in findings:
+        print(f"  [{f['severity']:>6}] {f['rule']:<14} :{f['line']}  "
+              f"{str(f.get('code', ''))[:58]}")
+    print("  findings are advisory — the operator decides at approve")
 
 
 def _remove_lines(settings: dict, rows: list[list[str]], idxs: set[int]) -> None:
@@ -202,6 +218,7 @@ def onboard(tool: str, inputs: list[str], yes: bool = False) -> None:
         proposed.write_text(json.dumps(suggested, indent=2, ensure_ascii=False))
         print(f"  ✓ 已移除 {len(idxs)} 行,继续审阅")
 
+    _print_static(tool_dir, manifest.get("command"))
     r = authorize.approve_core(manifest, tool_dir)
     print(f"\n[contract] {tool} APPROVED + LOCKED (settings sha256 {r['settings_sha256']}…)\n"
           f"          boundary: {r['boundary']}")

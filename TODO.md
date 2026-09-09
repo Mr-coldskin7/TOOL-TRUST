@@ -58,10 +58,10 @@ must be proven before anything is built on it.
 
 - [ ] **First-connect human review** for unknown-source tools (browser / unknown-CA
       model) — Tool Misuse mitigation
-- [ ] **semgrep SAST layer in register-tool onboarding**: `static_scan` section in
-      report.json
-  - hand-run a few times first to judge noise ratio before wiring into pipeline
-  - fills the honest "we don't scan tool source" gap → SAST/DAST/SCA closed loop
+- [x] **SAST-lite in onboarding** (2026-09-08): `attest/sast.py` — built-in AST
+      sniff (eval/exec/subprocess/network/write-to-shady-path) + optional
+      bandit/shellcheck backends; printed by `observe.py --scan`/`--onboard` as
+      advisory findings before the operator approves. Full semgrep not needed.
 - [x] **Caller identity in the gate** (2026-09-08): `gated_invoke(caller=...)` threads
       session identity into telemetry + results; MCP tools inject fastmcp Context
       (ctx.client_id) — Identity Spoofing mitigation

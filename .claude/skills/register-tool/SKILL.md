@@ -26,12 +26,13 @@ description: 用户说一句话，LLM 完成把一个脚本/语言注册成 Fast
    带 `mode + paths` 白名单；无副作用工具保持模板的 deny 默认。`requires.exec` 写运行时。
 5. **生成 tool.py**：用 templates/tool.py.tmpl（gate 决策闸包装，参数顺序需与 tool.yaml 的 `inputs` 一致）。
 6. **手动跑二进制**：直接执行 command，确认输出符合描述。
-7. **观察→授权（必经）**：
+7. **静态第一遍 → 观察→授权（必经）**：
    ```bash
-   uv run python observe.py <name> --scan <样例输入>   # 最小 srt 沙箱观察 → srt-settings.json.proposed + tool.yaml 声明 sandbox.srt_settings
-   #   审阅 proposed:域名/写路径与意图一致才批准(不要求它凭空比 claims 更全)
-   uv run python observe.py <name> --approve           # 打印权限摘要 → y/N → 锁定(settings 内容 sha256 进 contract.json)
-   uv run python observe.py --status                   # 确认该工具显示 operator-approved
+   uv run python observe.py <name> --scan <样例输入>
+   #   --scan 自动附带:① 静态嗅探(内置 AST/shellcheck,advisory)+ ② 最小 srt 沙箱观察 → proposed
+   #   审阅 proposed + 静态发现:域名/写路径/危险调用与意图一致才批准
+   uv run python observe.py <name> --approve           # 权限摘要 + y/N → 锁定(settings sha256 进 contract.json)
+   uv run python observe.py --status                   # 确认 operator-approved
    ```
    - 参考 `tools/demo-fetch` + `bash scripts/demo_onboarding.sh` 看完整链路
    - 未批准 = unmanaged,永远进不了强制路径；改源码/claims/settings 后必须重新 approve(Gate 3/4 会拒)

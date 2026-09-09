@@ -45,3 +45,4 @@ runtime/
 
 # 每次 observe 生成的报告（gate 缓存，不进 git）
 /tools/*/report.json
+docs/interview-qa.md

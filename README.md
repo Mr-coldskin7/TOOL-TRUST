@@ -1,22 +1,66 @@
 # tool-trust
 
-**Attested MCP Tool Hub.** Turn everyday scripts into trustworthy, self-declaring MCP tools. Each tool ships with a machine-readable behavioral contract — permissions discovered by running it inside sandbox-runtime (`srt`), then enforced on every call by that same sandbox.
+**Don't trust tools. Verify them, then enforce the promise.**
+
+An open-source MCP tool hub where every tool ships a *locked permission contract*:
+its permissions are discovered by actually running it in a sandbox (`srt`),
+approved by a human (permission table + confirm), hashed into a contract file,
+and **enforced on every call** — out-of-contract access is denied and logged.
+
+```
+   observe --scan      prove what it needs      (minimal sandbox, evidence)
+   observe --onboard   approve + lock           (permission table, human confirms)
+   gate + srt          enforce every call       (breach → violation-deny + audit)
+```
 
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](tests/)
 [![CI](https://github.com/Mr-coldskin7/TOOL-TRUST/actions/workflows/ci.yml/badge.svg)](https://github.com/Mr-coldskin7/TOOL-TRUST/actions/workflows/ci.yml)
 
----
+## Try it in 2 minutes
 
-## Why
+```bash
+npm install -g @anthropic-ai/sandbox-runtime
+uv sync
+bash scripts/demo_onboarding.sh
+```
 
-LLM agents increasingly call command-line tools on your behalf. But a tool's README rarely matches what it actually does. `tool-trust` closes that gap:
+It shows the whole loop on a sample tool: **unapproved → scan discovers
+`api.github.com` → you approve & it's locked → a real enforced call works →
+editing the settings afterward is denied as `contract-mismatch`**.
 
-1. **Discover** the tool's permissions by running it once inside the minimal `srt` sandbox and reading what it needed (blocked hosts, denied paths).
-2. **Legislate** — an operator reviews the evidence and approves a contract (`operator-approved`).
-3. **Enforce** every runtime call inside `srt`: any breach flips the gate to `violation-deny`.
-4. **Expose** the tool through a standard MCP server so any MCP-capable client (pi, Claude Code, etc.) can use it.
+## Fleet snapshot (live)
 
-No reputation scores, no manual security reviews. The first tool you write can already produce its first enforceable contract.
+```text
+$ observe.py --status
+  cache-tool         approved   net=[-] writes=[/tmp, /private/tmp]
+  demo-fetch         approved   net=[api.github.com] writes=[/tmp, /private/tmp]
+  env-gate           approved   net=[-] writes=[/tmp, /private/tmp]
+  fx-rate            approved   net=[open.er-api.com] writes=[/tmp, /private/tmp]
+  repo-stats         approved   net=[-] writes=[/tmp, /private/tmp]
+  sha-tool           approved   net=[-] writes=[/tmp, /private/tmp]
+  us-market          approved   net=[query1.finance.yahoo.com] writes=[/tmp, /private/tmp]
+  us-quote           approved   net=[query1,2.finance.yahoo.com] writes=[/tmp, /private/tmp]
+```
+
+9 tools enforced; any silent permission edit flips a tool to `drifted ⚠`.
+
+## The problem & the shape
+
+LLM agents increasingly call command-line tools on your behalf. But a tool's
+README rarely matches what it actually does. `tool-trust` closes that gap in
+**four stages**:
+
+1. **Discover** — run the tool once inside the minimal `srt` sandbox; read what
+   it needed (blocked hosts, denied paths) → `srt-settings.json.proposed`.
+2. **Legislate** — an operator reviews the permission table and approves
+   (`operator-approved`); claims + settings content are hashed into a
+   committed `contract.json`.
+3. **Enforce** — every runtime call runs inside `srt`; any breach flips the
+   gate to `violation-deny` (network AND filesystem, caller recorded).
+4. **Expose** — standard MCP server; only tools with a clean contract register.
+
+No reputation scores, no self-testimony. The first tool you write can already
+produce its first enforceable contract.
 
 ---
 
