@@ -37,6 +37,11 @@ editing the settings afterward is denied as `contract-mismatch`**.
 - `observe.py --status` — authorization overview; flags `drifted ⚠` when an
   approved contract's claims/settings no longer match, and hints at
   near-duplicate groups.
+- **Scheduled agent review** — `bash scripts/regscan.sh` runs one pi CLI agent
+  (non-interactive `pi -p`, read-only profiles) that executes
+  `--find-dups` + `--status` and writes a markdown report (duplicates with
+  merge advice + authorization anomalies) to `runtime/`, then posts a macOS
+  notification. Script header has `cron`/`launchd` scheduling snippets.
 
 ## Fleet snapshot (live)
 
