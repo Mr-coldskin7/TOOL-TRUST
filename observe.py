@@ -231,6 +231,21 @@ def revoke_tool(tool: str) -> None:
     print(f"[contract] {r['tool']}: {r['decision']} — {r.get('detail', '')}")
 
 
+def find_dups() -> None:
+    """Near-duplicate candidates across tools/ — NOTIFY only, never mutates."""
+    from attest import similar
+
+    pairs = similar.find_duplicates(TOOLS_DIR)
+    if not pairs:
+        print("no near-duplicate candidates")
+        return
+    print("\n⚠ near-duplicate candidates (NOT auto-deleted — operator decides):\n")
+    for p in pairs:
+        print(f"  {p['a']:<16} ~ {p['b']:<16} sim={p['similarity']:<6} {p['why']}")
+        print(f"        dirs: {p['dirs']}")
+    print("\n  → review and merge/remove manually; nothing was changed.")
+
+
 def status_all() -> None:
     """Human-readable overview: every tool × its authorization state."""
     rows = authorize.status_all(TOOLS_DIR)
@@ -263,12 +278,24 @@ def main() -> None:
                     help="pre-flight requires hard check")
     ap.add_argument("--status", action="store_true",
                     help="overview: every tool × authorization state")
+    ap.add_argument("--find-dups", action="store_true",
+                    help="near-duplicate candidates across tools/ (notify only)")
     ap.add_argument("--yes", action="store_true",
                     help="skip interactive confirm")
     args = ap.parse_args()
 
     if args.status:
         status_all()
+        try:
+            from attest import similar
+            n = len(similar.find_duplicates(TOOLS_DIR))
+            if n:
+                print(f"  ⚠ {n} near-duplicate candidate group(s): rerun observe.py --find-dups")
+        except Exception:
+            pass
+        return
+    if args.find_dups:
+        find_dups()
         return
     if not args.tool:
         ap.print_help()

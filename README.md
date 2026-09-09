@@ -28,6 +28,16 @@ It shows the whole loop on a sample tool: **unapproved → scan discovers
 `api.github.com` → you approve & it's locked → a real enforced call works →
 editing the settings afterward is denied as `contract-mismatch`**.
 
+## Registry health
+
+- `observe.py --find-dups` — near-duplicate candidates across `tools/`
+  (behavioral signature: description + command + claims + custom write paths +
+  domains). **Notify only** — nothing is deleted or merged; the operator decides.
+  Example today: `us-market ~ us-quote` share `query1.finance.yahoo.com`.
+- `observe.py --status` — authorization overview; flags `drifted ⚠` when an
+  approved contract's claims/settings no longer match, and hints at
+  near-duplicate groups.
+
 ## Fleet snapshot (live)
 
 ```text
