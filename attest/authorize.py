@@ -17,7 +17,7 @@ import pathlib
 
 import yaml
 
-from attest import contract, prereq  # noqa: F401  (origin helpers)
+from attest import contract
 
 
 DEFAULT_SETTINGS = {
@@ -92,7 +92,10 @@ def verify_snapshot(manifest: dict, tool_dir: pathlib.Path) -> tuple[bool, str]:
         if not sp.exists():
             return False, "srt-settings.json missing since approval"
         if hashlib.sha256(sp.read_bytes()).hexdigest() != snap_hash:
-            return False, "srt-settings.json content changed since approval"
+            approved = snap.get("summary") or {}
+            ref = (f" (approved had net={approved.get('network')} "
+                   f"writes={approved.get('writes')})")
+            return False, "srt-settings.json content changed since approval" + ref
     return True, "ok"
 
 
@@ -155,11 +158,25 @@ def status_all(tools_dir: pathlib.Path) -> list[dict]:
 # approve core (shared by CLI --approve / --onboard and authorizer.approve)
 # ---------------------------------------------------------------------------
 
-def approve_core(manifest: dict, tool_dir: pathlib.Path) -> dict:
+def _settings_summary(settings: dict) -> dict:
+    """Human-comparable summary of what approval locked in (for audit)."""
+    net = settings.get("network", {})
+    doms = [d for d in (net.get("allowedDomains") or []) if isinstance(d, str)]
+    fs = settings.get("filesystem", {})
+    writes = [w for w in (fs.get("allowWrite") or []) if isinstance(w, str)]
+    return {"network": list(doms), "writes": list(writes)}
+
+
+def approve_core(manifest: dict, tool_dir: pathlib.Path,
+                 caller: str | None = None) -> dict:
     """Legislate: promote settings, set origin, lock settings content hash.
 
     Returns a summary dict. Callers decide whether/how to confirm (CLI y/N,
     MCP permissions gate). This is the ONLY place contract state is created.
+
+    Args:
+      caller: identity of the approving session/agent; recorded as
+        approved_by so the audit chain links caller → approver.
     """
     from attest.provenance import compute_tool_hash
 
@@ -181,18 +198,20 @@ def approve_core(manifest: dict, tool_dir: pathlib.Path) -> dict:
         promoted = False
 
     contract.approve(claims)
-    claims["approved_by"] = "operator"
+    claims["approved_by"] = caller or "operator"
     (tool_dir / "tool.yaml").write_text(
         yaml.safe_dump(manifest, allow_unicode=True, sort_keys=False))
 
+    settings = json.loads(target.read_text())
     settings_hash = hashlib.sha256(target.read_bytes()).hexdigest()
     prov = manifest.get("provenance")
     snapshot = {
-        "schema": 2,
+        "schema": 3,
         "tool": manifest.get("name", tool_dir.name),
         "verdict": "pass",
         "claims": claims,
         "sandbox": {"srt_settings": sb_name, "srt_settings_sha256": settings_hash},
+        "summary": _settings_summary(settings),   # what was locked, readable
         "provenance": {
             "version": prov.get("version") if prov else None,
             "hash": compute_tool_hash(tool_dir),

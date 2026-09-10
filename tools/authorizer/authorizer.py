@@ -6,6 +6,7 @@ system) / revoke.
 """
 
 import json
+import os
 import pathlib
 import sys
 
@@ -73,7 +74,8 @@ def main() -> None:
         warn = authorize.first_connect_warning(m)
         if warn:
             print(warn)
-        out = authorize.approve_core(m, d)
+        out = authorize.approve_core(
+            m, d, caller=os.environ.get("TOOL_TRUST_CALLER"))
         print(f"{out['decision']} {out['tool']} sha256={out['settings_sha256']} "
               f"promoted={out['promoted']}")
         print(out["boundary"])

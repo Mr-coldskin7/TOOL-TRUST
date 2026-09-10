@@ -1,0 +1,44 @@
+{
+  "schema": 3,
+  "tool": "authorizer",
+  "verdict": "pass",
+  "claims": {
+    "origin": "operator-approved",
+    "allow": [
+      "exit",
+      "fd",
+      "file-read",
+      "memory",
+      "network",
+      "stdout",
+      "sync"
+    ],
+    "deny": [
+      "exec",
+      "file-write",
+      "other",
+      "perms",
+      "process"
+    ],
+    "approved_at": "2026-09-10T15:32:32+00:00",
+    "approved_by": "operator"
+  },
+  "sandbox": {
+    "srt_settings": "srt-settings.json",
+    "srt_settings_sha256": "13a03dc1f0eef3c8daa459c884256e49a81ce02b80f9237fde7f5e781a0c0916"
+  },
+  "summary": {
+    "network": [],
+    "writes": [
+      "/tmp",
+      "/private/tmp"
+    ]
+  },
+  "provenance": {
+    "version": null,
+    "hash": "ccfb7ae7c8133eb4d5831607b2f94bf3376e2248b36fda8ed8f9b75745161a53"
+  },
+  "approved_by": "operator",
+  "approved_at": "2026-09-10T15:32:32+00:00",
+  "source": "unknown"
+}

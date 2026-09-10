@@ -39,7 +39,7 @@ def test_approve_locks_settings_content(tmp_path):
     r = authorize.approve_core(m, d)
     assert r["decision"] == "approved"
     snap = json.loads((d / "contract.json").read_text())
-    assert snap["schema"] == 2
+    assert snap["schema"] == 3
     assert "srt_settings_sha256" in snap["sandbox"]
     assert r["settings_sha256"] == snap["sandbox"]["srt_settings_sha256"][:12]
     # edit settings → hash no longer matches

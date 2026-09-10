@@ -1,10 +1,11 @@
 name: authorizer
-description: Authorization management for the toolhub — status / onboard / approve / revoke tools (human-in-the-loop; approve is the legislative step)
+description: Authorization management for the toolhub — status / onboard / approve
+  / revoke tools (human-in-the-loop; approve is the legislative step)
 command: python3 authorizer.py
 inputs:
 - action
 claims:
-  origin: author-built
+  origin: operator-approved
   allow:
   - exit
   - fd
@@ -19,6 +20,8 @@ claims:
   - other
   - perms
   - process
+  approved_at: '2026-09-10T15:32:32+00:00'
+  approved_by: operator
 requires:
   env: []
   files:
@@ -26,3 +29,5 @@ requires:
   exec:
   - python3
   writable: []
+sandbox:
+  srt_settings: srt-settings.json

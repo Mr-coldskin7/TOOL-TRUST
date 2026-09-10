@@ -20,6 +20,7 @@ Usage:
 """
 import argparse
 import json
+import os
 import pathlib
 import shutil
 
@@ -137,7 +138,8 @@ def approve_tool(tool: str, yes: bool = False) -> None:
         if input("Approve and LOCK these permissions? [y/N] ").strip().lower() not in ("y", "yes"):
             print("aborted — nothing written")
             return
-    r = authorize.approve_core(manifest, tool_dir)
+    r = authorize.approve_core(manifest, tool_dir,
+                              caller=os.environ.get("TOOL_TRUST_CALLER"))
     print(f"[contract] {tool} APPROVED + LOCKED (settings sha256 {r['settings_sha256']}…)\n"
           f"          {tool_dir / 'contract.json'} written — edit srt-settings.json "
           "now ⇒ contract-mismatch on next call")
@@ -219,7 +221,8 @@ def onboard(tool: str, inputs: list[str], yes: bool = False) -> None:
         print(f"  ✓ 已移除 {len(idxs)} 行,继续审阅")
 
     _print_static(tool_dir, manifest.get("command"))
-    r = authorize.approve_core(manifest, tool_dir)
+    r = authorize.approve_core(manifest, tool_dir,
+                              caller=os.environ.get("TOOL_TRUST_CALLER"))
     print(f"\n[contract] {tool} APPROVED + LOCKED (settings sha256 {r['settings_sha256']}…)\n"
           f"          boundary: {r['boundary']}")
 

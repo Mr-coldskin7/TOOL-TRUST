@@ -12,8 +12,6 @@ only makes decisions, without running the tool:
 Note: claims (what it does) are checked at attest time by reconcile; provenance
 checks "still the same verified artifact".
 """
-import hashlib
-import hashlib
 import json
 import pathlib
 import shutil
